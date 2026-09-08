@@ -1,10 +1,13 @@
 import os
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models import Base
 
+# Load environment variables from .env file
+load_dotenv()
+
 # Neon PostgreSQL connection string or SQLite fallback
-# Example Neon URL: postgresql://[user]:[password]@[endpoint].neon.tech/[dbname]?sslmode=require
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./virtual_cards.db")
 
 # SQLAlchemy requires 'postgresql://' instead of legacy 'postgres://'
