@@ -4,6 +4,7 @@ import {
   Plus,
   ArrowDownLeft,
   ArrowUpRight,
+  ArrowRight,
   Shield,
   ShieldAlert,
   Snowflake,
