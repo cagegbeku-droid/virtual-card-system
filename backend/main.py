@@ -287,19 +287,21 @@ def topup_with_momo(
     if card.status == "TERMINATED":
         raise HTTPException(status_code=400, detail="Cannot top up a deactivated card")
 
-    fee_ghs = round(payload.ghs_amount * MOMO_FEE_PERCENT, 2)
-    net_ghs = payload.ghs_amount - fee_ghs
-    usd_to_credit = round(net_ghs / FX_USD_TO_GHS, 2)
+    deposit_ghs = payload.ghs_amount
+    usd_to_credit = round(deposit_ghs / FX_USD_TO_GHS, 2)
 
     if usd_to_credit <= 0:
-        raise HTTPException(status_code=400, detail="Topup amount too low after fees")
+        raise HTTPException(status_code=400, detail="Topup amount too low")
+
+    fee_ghs = round(deposit_ghs * MOMO_FEE_PERCENT, 2)
+    total_prompt_charge_ghs = round(deposit_ghs + fee_ghs, 2)
 
     order = MoMoTopupOrder(
         user_id=current_user.id,
         card_id=card.id,
         network=payload.network.upper(),
         phone_number=payload.phone_number,
-        ghs_amount=payload.ghs_amount,
+        ghs_amount=deposit_ghs,
         usd_amount=usd_to_credit,
         fx_rate=FX_USD_TO_GHS,
         fee_ghs=fee_ghs,
@@ -309,10 +311,10 @@ def topup_with_momo(
     db.commit()
     db.refresh(order)
 
-    # Initialize Paystack charge
+    # Initialize Paystack charge for total amount (Deposit + Network Fee)
     paystack_res = initialize_momo_charge(
         email=current_user.email or f"{current_user.phone_number}@coratechglobal.com",
-        amount_ghs=payload.ghs_amount,
+        amount_ghs=total_prompt_charge_ghs,
         phone_number=payload.phone_number,
         network=payload.network,
         reference=order.reference,

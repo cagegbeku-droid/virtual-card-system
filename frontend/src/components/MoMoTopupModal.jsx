@@ -21,16 +21,16 @@ export default function MoMoTopupModal({ card, fxRate = 11.55, feePercent = 1.5,
 
   if (!isOpen) return null;
 
-  const numGhs = parseFloat(ghsAmount) || 0;
-  const feeGhs = numGhs * (feePercent / 100);
-  const netGhs = Math.max(0, numGhs - feeGhs);
-  const estimatedUsd = netGhs / (fxRate || 11.55);
+  const depositGhs = parseFloat(ghsAmount) || 0;
+  const creditedUsd = depositGhs / (fxRate || 11.55);
+  const feeGhs = depositGhs * (feePercent / 100);
+  const totalPromptChargedGhs = depositGhs + feeGhs;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
-    if (numGhs < 20) {
+    if (depositGhs < 20) {
       setError('Minimum top-up amount is GHS 20.00');
       return;
     }
@@ -52,7 +52,7 @@ export default function MoMoTopupModal({ card, fxRate = 11.55, feePercent = 1.5,
           card_id: card?.id,
           network,
           phone_number: cleanPhone,
-          ghs_amount: numGhs,
+          ghs_amount: depositGhs,
         }),
       });
 
@@ -61,9 +61,11 @@ export default function MoMoTopupModal({ card, fxRate = 11.55, feePercent = 1.5,
       }
 
       const data = res.data || {
-        ghs_amount: numGhs,
-        usd_credited: estimatedUsd,
-        new_balance: Number(card?.balance ?? 0) + estimatedUsd,
+        ghs_amount: depositGhs,
+        usd_credited: creditedUsd,
+        fee_ghs: feeGhs,
+        total_paid_ghs: totalPromptChargedGhs,
+        new_balance: Number(card?.balance ?? 0) + creditedUsd,
         reference: `MOMO_${Date.now()}`,
       };
 
@@ -117,22 +119,26 @@ export default function MoMoTopupModal({ card, fxRate = 11.55, feePercent = 1.5,
             <div>
               <h4 className="text-base font-bold text-white">Funds Successfully Credited</h4>
               <p className="text-xs text-slate-400 font-mono mt-1">
-                Your Visa card ending in {card?.masked_number ? card.masked_number.slice(-4) : '8824'} is loaded and ready.
+                Your Visa card ending in {card?.masked_number ? card.masked_number.slice(-4) : '8824'} has been loaded.
               </p>
             </div>
 
             <div className="p-3.5 rounded-lg bg-[#0d1117] border border-[#30363d] text-left text-xs font-mono space-y-2">
               <div className="flex justify-between">
-                <span className="text-slate-400">Mobile Money Paid:</span>
-                <span className="text-white font-semibold">GH₵ {Number(successData.ghs_amount ?? numGhs).toFixed(2)}</span>
+                <span className="text-slate-400">Card Balance Credited:</span>
+                <span className="text-emerald-400 font-bold text-sm">+${Number(successData.usd_credited ?? creditedUsd).toFixed(2)} USD</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">USD Credited:</span>
-                <span className="text-emerald-400 font-bold">+${Number(successData.usd_credited ?? estimatedUsd).toFixed(2)} USD</span>
+                <span className="text-slate-400">Deposit Equivalent:</span>
+                <span className="text-white font-semibold">GH₵ {Number(successData.ghs_amount ?? depositGhs).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Exchange Rate:</span>
                 <span className="text-slate-300">1 USD = {fxRate} GHS</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Network Fee on Prompt (1.5%):</span>
+                <span className="text-slate-400">GH₵ {feeGhs.toFixed(2)}</span>
               </div>
               <div className="flex justify-between border-t border-[#30363d] pt-2">
                 <span className="text-slate-400">Updated Card Balance:</span>
@@ -199,7 +205,7 @@ export default function MoMoTopupModal({ card, fxRate = 11.55, feePercent = 1.5,
             {/* Amount Selection */}
             <div>
               <label className="block text-[11px] text-slate-400 uppercase font-semibold mb-1">
-                Top-Up Amount (Ghana Cedis)
+                Deposit Amount (Ghana Cedis to Credit)
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-semibold">
@@ -235,46 +241,50 @@ export default function MoMoTopupModal({ card, fxRate = 11.55, feePercent = 1.5,
               </div>
             </div>
 
-            {/* Live Transparent FX Conversion Box */}
+            {/* Transparent Calculation Breakdown */}
             <div className="p-3.5 rounded-lg bg-[#0d1117] border border-[#30363d] space-y-1.5 text-xs">
               <div className="flex justify-between text-slate-400">
-                <span>Commercial Exchange Rate:</span>
-                <span className="text-white font-semibold">1 USD = {fxRate} GHS</span>
+                <span>Deposit Credited to Card:</span>
+                <span className="text-white font-semibold">GH₵ {depositGhs.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-slate-400">
-                <span>Network Processing Fee (1.5%):</span>
-                <span>GH₵ {feeGhs.toFixed(2)}</span>
+                <span>Exchange Rate:</span>
+                <span className="text-slate-300">1 USD = {fxRate} GHS</span>
               </div>
-              <div className="flex justify-between text-slate-400">
-                <span>Net Converted to USD:</span>
-                <span>GH₵ {netGhs.toFixed(2)}</span>
+              <div className="flex justify-between border-t border-[#30363d] pt-1.5">
+                <span className="text-slate-200 font-semibold">USD Credited to Your Account:</span>
+                <span className="text-emerald-400 font-bold text-sm">+${creditedUsd.toFixed(2)} USD</span>
               </div>
-              <div className="flex justify-between border-t border-[#30363d] pt-2">
-                <span className="text-slate-300 font-semibold">Card Balance Credited:</span>
-                <span className="text-emerald-400 font-bold text-sm">+${estimatedUsd.toFixed(2)} USD</span>
+              <div className="flex justify-between text-[11px] text-slate-400 pt-1">
+                <span>Processing Fee (1.5% added to prompt):</span>
+                <span className="text-amber-400 font-mono">+GH₵ {feeGhs.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-[11px] text-slate-200 font-semibold border-t border-[#30363d] pt-1">
+                <span>Total to Authorize on Phone Prompt:</span>
+                <span className="text-white font-bold font-mono">GH₵ {totalPromptChargedGhs.toFixed(2)}</span>
               </div>
             </div>
 
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={loading || numGhs < 20}
+              disabled={loading || depositGhs < 20}
               className="w-full py-2.5 px-4 rounded-md bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors flex items-center justify-center gap-2 font-sans"
             >
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Awaiting MoMo Prompt on {phoneNumber}...</span>
+                  <span>Prompting MoMo Wallet for GH₵ {totalPromptChargedGhs.toFixed(2)}...</span>
                 </>
               ) : (
                 <>
                   <ShieldCheck className="w-4 h-4" />
-                  <span>Pay GH₵ {numGhs.toFixed(2)} via Paystack</span>
+                  <span>Authorize GH₵ {totalPromptChargedGhs.toFixed(2)} via MoMo</span>
                 </>
               )}
             </button>
             <span className="block text-center text-[10px] text-slate-500">
-              You will receive an instant USSD prompt on your phone to approve with your MoMo PIN.
+              Your Visa card receives the full ${creditedUsd.toFixed(2)} USD. The GH₵ {feeGhs.toFixed(2)} fee is added to your MoMo PIN prompt.
             </span>
           </form>
         )}
