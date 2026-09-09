@@ -1,19 +1,19 @@
 import React, { useState } from 'react';
-import { X, Smartphone, ArrowRight, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
-import confetti from 'canvas-confetti';
+import { X, Smartphone, ArrowRight, CheckCircle2, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
+import { safeFetch } from '../api';
 
 const NETWORKS = [
-  { id: 'MTN', name: 'MTN MoMo', color: 'from-amber-400 to-yellow-500 text-slate-900 border-amber-300', bg: 'bg-yellow-400' },
-  { id: 'TELECEL', name: 'Telecel Cash', color: 'from-red-600 to-rose-700 text-white border-red-400', bg: 'bg-red-600' },
-  { id: 'AT', name: 'AT Money', color: 'from-blue-600 to-cyan-700 text-white border-blue-400', bg: 'bg-blue-600' },
+  { id: 'MTN', name: 'MTN Mobile Money', short: 'MTN MoMo', code: '024 / 054 / 055 / 059' },
+  { id: 'TELECEL', name: 'Telecel Cash', short: 'Telecel', code: '020 / 050' },
+  { id: 'AT', name: 'AT Money', short: 'AT Money', code: '027 / 057' },
 ];
 
-const PRESETS = [50, 100, 250, 500, 1000];
+const PRESETS = [50, 100, 200, 500, 1000];
 
-export default function MoMoTopupModal({ card, fxRate = 15.50, feePercent = 1.5, isOpen, onClose, onSuccess }) {
+export default function MoMoTopupModal({ card, fxRate = 11.55, feePercent = 1.5, isOpen, onClose, onSuccess }) {
   const [network, setNetwork] = useState('MTN');
   const [phoneNumber, setPhoneNumber] = useState('0244123456');
-  const [ghsAmount, setGhsAmount] = useState('250');
+  const [ghsAmount, setGhsAmount] = useState('100');
   const [loading, setLoading] = useState(false);
   const [ussdStep, setUssdStep] = useState(false);
   const [error, setError] = useState('');
@@ -22,9 +22,9 @@ export default function MoMoTopupModal({ card, fxRate = 15.50, feePercent = 1.5,
   if (!isOpen) return null;
 
   const numGhs = parseFloat(ghsAmount) || 0;
-  const feeGhs = (numGhs * (feePercent / 100));
+  const feeGhs = numGhs * (feePercent / 100);
   const netGhs = Math.max(0, numGhs - feeGhs);
-  const estimatedUsd = (netGhs / fxRate);
+  const estimatedUsd = netGhs / (fxRate || 11.55);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -35,45 +35,42 @@ export default function MoMoTopupModal({ card, fxRate = 15.50, feePercent = 1.5,
       return;
     }
 
-    if (!phoneNumber || phoneNumber.length < 9) {
+    const cleanPhone = phoneNumber.trim().replace(/\s+/g, '').replace(/-/g, '');
+    if (!cleanPhone || cleanPhone.length < 9) {
       setError('Please enter a valid Ghana phone number (e.g. 0244123456)');
       return;
     }
 
-    // Step 1: Simulate USSD prompt
     setLoading(true);
     setUssdStep(true);
 
     try {
-      // Simulate real-world USSD authorization delay
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      const response = await fetch('/api/wallet/topup', {
+      const res = await safeFetch('/api/wallet/topup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          card_id: card.id,
+          card_id: card?.id,
           network,
-          phone_number: phoneNumber,
+          phone_number: cleanPhone,
           ghs_amount: numGhs,
         }),
       });
 
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.detail || 'Top-up failed');
+      if (!res.ok) {
+        throw new Error(res.error || 'Mobile money authorization timed out or declined');
       }
 
-      const data = await response.json();
+      const data = res.data || {
+        ghs_amount: numGhs,
+        usd_credited: estimatedUsd,
+        new_balance: Number(card?.balance ?? 0) + estimatedUsd,
+        reference: `MOMO_${Date.now()}`,
+      };
+
       setSuccessData(data);
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 },
-      });
       onSuccess?.();
     } catch (err) {
-      setError(err.message || 'An error occurred during top-up');
+      setError(err.message || 'An error occurred during mobile money top-up');
       setUssdStep(false);
     } finally {
       setLoading(false);
@@ -88,197 +85,197 @@ export default function MoMoTopupModal({ card, fxRate = 15.50, feePercent = 1.5,
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl overflow-hidden text-zinc-100">
-        {/* Glow Accent */}
-        <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        {/* Close Button */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fade-in text-slate-100">
+      <div className="relative w-full max-w-lg bg-[#161b22] border border-[#30363d] rounded-xl p-5 sm:p-7 shadow-2xl overflow-hidden">
         <button
           onClick={resetAndClose}
-          className="absolute top-6 right-6 p-2 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+          className="absolute top-4 right-4 p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-[#21262d] transition-colors"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </button>
 
-        {successData ? (
-          /* SUCCESS SCREEN */
-          <div className="flex flex-col items-center text-center py-6 animate-scale-up">
-            <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mb-4 border border-emerald-500/30">
-              <CheckCircle2 className="w-10 h-10" />
-            </div>
-            <h3 className="text-2xl font-bold text-white mb-1">Top-Up Successful!</h3>
-            <p className="text-sm text-zinc-400 mb-6">
-              Funds have been converted and loaded onto your virtual Visa.
+        {/* Modal Header */}
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-9 h-9 rounded-md bg-[#21262d] border border-[#30363d] flex items-center justify-center text-emerald-400">
+            <Smartphone className="w-4 h-4" />
+          </div>
+          <div>
+            <h3 className="text-base font-semibold text-white">Top Up Virtual Visa Card</h3>
+            <p className="text-xs text-slate-400 font-mono">
+              Paystack Mobile Money Rails • Bank of Ghana interbank rate
             </p>
+          </div>
+        </div>
 
-            <div className="w-full bg-zinc-950/60 rounded-2xl p-4 border border-zinc-800 mb-6 text-left space-y-2">
-              <div className="flex justify-between text-xs text-zinc-400">
-                <span>MoMo Paid</span>
-                <span className="font-semibold text-white">GHS {successData.ghs_amount.toFixed(2)}</span>
+        {/* SUCCESS VIEW */}
+        {successData ? (
+          <div className="py-4 text-center space-y-4">
+            <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mx-auto flex items-center justify-center">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+
+            <div>
+              <h4 className="text-base font-bold text-white">Funds Successfully Credited</h4>
+              <p className="text-xs text-slate-400 font-mono mt-1">
+                Your Visa card ending in {card?.masked_number ? card.masked_number.slice(-4) : '8824'} is loaded and ready.
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-lg bg-[#0d1117] border border-[#30363d] text-left text-xs font-mono space-y-2">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Mobile Money Paid:</span>
+                <span className="text-white font-semibold">GH₵ {Number(successData.ghs_amount ?? numGhs).toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-xs text-zinc-400">
-                <span>USD Credited</span>
-                <span className="font-bold text-emerald-400">+${successData.usd_credited.toFixed(2)} USD</span>
+              <div className="flex justify-between">
+                <span className="text-slate-400">USD Credited:</span>
+                <span className="text-emerald-400 font-bold">+${Number(successData.usd_credited ?? estimatedUsd).toFixed(2)} USD</span>
               </div>
-              <div className="flex justify-between text-xs text-zinc-400">
-                <span>New Card Balance</span>
-                <span className="font-semibold text-white">${successData.new_balance.toFixed(2)} USD</span>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Exchange Rate:</span>
+                <span className="text-slate-300">1 USD = {fxRate} GHS</span>
               </div>
-              <div className="flex justify-between text-xs text-zinc-400 pt-2 border-t border-zinc-800/80">
-                <span>Reference</span>
-                <span className="font-mono text-[11px] text-zinc-300">{successData.reference}</span>
+              <div className="flex justify-between border-t border-[#30363d] pt-2">
+                <span className="text-slate-400">Updated Card Balance:</span>
+                <span className="text-emerald-400 font-bold">${Number(successData.new_balance ?? 0).toFixed(2)} USD</span>
               </div>
             </div>
 
             <button
               onClick={resetAndClose}
-              className="w-full py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold tracking-wide transition-all shadow-lg shadow-emerald-500/20"
+              className="w-full py-2.5 px-4 rounded-md bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors font-sans"
             >
-              Done & Return to Card
+              Done
             </button>
           </div>
-        ) : ussdStep && loading ? (
-          /* USSD PUSH STEP */
-          <div className="flex flex-col items-center text-center py-8">
-            <div className="w-16 h-16 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center mb-4 border border-amber-500/30 animate-pulse">
-              <Smartphone className="w-8 h-8" />
-            </div>
-            <h3 className="text-xl font-bold text-white mb-2">Authorizing MoMo Payment</h3>
-            <p className="text-sm text-zinc-400 max-w-sm mb-6">
-              A prompt has been dispatched to <span className="font-semibold text-amber-400">{phoneNumber}</span>. Enter your Mobile Money PIN on your phone to complete the transaction.
-            </p>
-            <div className="flex items-center gap-2 text-xs text-zinc-400">
-              <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-              <span>Awaiting payment confirmation...</span>
-            </div>
-          </div>
         ) : (
-          /* INPUT FORM */
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <h3 className="text-xl font-bold text-white">Top Up Virtual Card</h3>
-              <p className="text-xs text-zinc-400 mt-0.5">
-                Instant Mobile Money deposit to Visa ending in <span className="font-mono text-zinc-300 font-semibold">{card?.masked_number?.slice(-4)}</span>
-              </p>
-            </div>
-
+          /* FORM VIEW */
+          <form onSubmit={handleSubmit} className="space-y-4 text-xs font-mono">
             {error && (
-              <div className="flex items-center gap-2 p-3 text-xs bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded-xl">
+              <div className="flex items-center gap-2 p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-md">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{error}</span>
               </div>
             )}
 
-            {/* Select Network */}
+            {/* Network Selector */}
             <div>
-              <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider block mb-2">
-                Select Network
+              <label className="block text-[11px] text-slate-400 uppercase font-semibold mb-1.5">
+                Select Mobile Money Network
               </label>
               <div className="grid grid-cols-3 gap-2">
-                {NETWORKS.map((net) => (
+                {NETWORKS.map((n) => (
                   <button
-                    key={net.id}
+                    key={n.id}
                     type="button"
-                    onClick={() => setNetwork(net.id)}
-                    className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex flex-col items-center gap-1.5 ${
-                      network === net.id
-                        ? `bg-zinc-800 text-white border-emerald-500 shadow-md shadow-emerald-950/40 ring-1 ring-emerald-500/40`
-                        : 'bg-zinc-950/60 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                    onClick={() => setNetwork(n.id)}
+                    className={`p-2.5 rounded-md border text-left transition-colors ${
+                      network === n.id
+                        ? 'bg-[#21262d] border-emerald-500 text-white'
+                        : 'bg-[#0d1117] border-[#30363d] text-slate-400 hover:text-white'
                     }`}
                   >
-                    <span className={`w-3 h-3 rounded-full ${net.bg}`} />
-                    <span>{net.name}</span>
+                    <p className="font-semibold text-xs text-white">{n.short}</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">{n.code}</p>
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Phone Number Input */}
+            {/* Phone Number */}
             <div>
-              <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider block mb-1.5">
-                Mobile Money Number
+              <label className="block text-[11px] text-slate-400 uppercase font-semibold mb-1">
+                MoMo Wallet Phone Number
               </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400 text-xs font-bold">
-                  🇬🇭 +233
-                </div>
-                <input
-                  type="tel"
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  placeholder="024 123 4567"
-                  className="w-full bg-zinc-950/80 border border-zinc-800 rounded-xl py-2.5 pl-20 pr-4 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                  required
-                />
-              </div>
+              <input
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="024 412 3456"
+                className="w-full bg-[#0d1117] border border-[#30363d] rounded-md px-3 py-2 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 text-xs"
+                required
+              />
             </div>
 
-            {/* Amount in GHS */}
+            {/* Amount Selection */}
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                  Amount to Deposit
-                </label>
-                <span className="text-[11px] text-zinc-400">
-                  Rate: 1 USD ≈ {fxRate} GHS
-                </span>
-              </div>
+              <label className="block text-[11px] text-slate-400 uppercase font-semibold mb-1">
+                Top-Up Amount (Ghana Cedis)
+              </label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-xs font-bold text-zinc-400">
-                  GHS
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-semibold">
+                  GH₵
                 </span>
                 <input
                   type="number"
-                  step="any"
+                  min="20"
+                  step="1"
                   value={ghsAmount}
                   onChange={(e) => setGhsAmount(e.target.value)}
-                  placeholder="100.00"
-                  className="w-full bg-zinc-950/80 border border-zinc-800 rounded-xl py-2.5 pl-14 pr-4 text-sm font-semibold text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-md py-2 pl-12 pr-3 text-white text-base font-bold focus:outline-none focus:border-emerald-500"
                   required
                 />
               </div>
 
-              {/* Preset Buttons */}
-              <div className="flex gap-1.5 mt-2 overflow-x-auto pb-1">
+              {/* Presets */}
+              <div className="flex items-center gap-1.5 mt-2">
                 {PRESETS.map((amt) => (
                   <button
                     key={amt}
                     type="button"
-                    onClick={() => setGhsAmount(amt.toString())}
-                    className="px-2.5 py-1 text-xs rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium transition-colors"
+                    onClick={() => setGhsAmount(String(amt))}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors ${
+                      ghsAmount === String(amt)
+                        ? 'bg-[#21262d] text-emerald-400 border-emerald-500'
+                        : 'bg-[#0d1117] text-slate-400 border-[#30363d] hover:text-white'
+                    }`}
                   >
-                    GHS {amt}
+                    GH₵ {amt}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Live Exchange Calculation Box */}
-            <div className="p-3.5 rounded-2xl bg-zinc-950/70 border border-zinc-800/90 text-xs space-y-1.5">
-              <div className="flex justify-between text-zinc-400">
-                <span>MoMo Network Fee ({feePercent}%)</span>
-                <span>GHS {feeGhs.toFixed(2)}</span>
+            {/* Live Transparent FX Conversion Box */}
+            <div className="p-3.5 rounded-lg bg-[#0d1117] border border-[#30363d] space-y-1.5 text-xs">
+              <div className="flex justify-between text-slate-400">
+                <span>Commercial Exchange Rate:</span>
+                <span className="text-white font-semibold">1 USD = {fxRate} GHS</span>
               </div>
-              <div className="flex justify-between text-zinc-400">
-                <span>Net Converted Amount</span>
-                <span>GHS {netGhs.toFixed(2)}</span>
+              <div className="flex justify-between text-slate-400">
+                <span>Network Processing Fee (1.5%):</span>
+                <span>GH₵ {feeGhs.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-zinc-100 font-bold pt-1.5 border-t border-zinc-800">
-                <span>Estimated Card Credit</span>
-                <span className="text-emerald-400 font-mono text-sm">+${estimatedUsd.toFixed(2)} USD</span>
+              <div className="flex justify-between text-slate-400">
+                <span>Net Converted to USD:</span>
+                <span>GH₵ {netGhs.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between border-t border-[#30363d] pt-2">
+                <span className="text-slate-300 font-semibold">Card Balance Credited:</span>
+                <span className="text-emerald-400 font-bold text-sm">+${estimatedUsd.toFixed(2)} USD</span>
               </div>
             </div>
 
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={loading || numGhs <= 0}
-              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 disabled:opacity-50 text-white font-bold tracking-wide transition-all shadow-lg shadow-emerald-950/60 flex items-center justify-center gap-2"
+              disabled={loading || numGhs < 20}
+              className="w-full py-2.5 px-4 rounded-md bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors flex items-center justify-center gap-2 font-sans"
             >
-              <span>Confirm & Pay GHS {numGhs.toFixed(2)}</span>
-              <ArrowRight className="w-4 h-4" />
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Awaiting MoMo Prompt on {phoneNumber}...</span>
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Pay GH₵ {numGhs.toFixed(2)} via Paystack</span>
+                </>
+              )}
             </button>
+            <span className="block text-center text-[10px] text-slate-500">
+              You will receive an instant USSD prompt on your phone to approve with your MoMo PIN.
+            </span>
           </form>
         )}
       </div>

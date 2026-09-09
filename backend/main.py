@@ -46,9 +46,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Standard market rates
-FX_USD_TO_GHS = 15.50  # 1 USD = 15.50 GHS
-MOMO_FEE_PERCENT = 0.015  # 1.5% MoMo processing fee
+# Standard market rates (Bank of Ghana Commercial Selling Rate)
+FX_USD_TO_GHS = float(os.getenv("FX_USD_TO_GHS", "11.55"))  # 1 USD = 11.55 GHS
+MOMO_FEE_PERCENT = float(os.getenv("MOMO_FEE_PERCENT", "0.015"))  # 1.5% MoMo network processing fee
 
 # ----------------- FX & Rates -----------------
 @app.get("/api/fx-rate", response_model=schemas.ExchangeRateResponse)

@@ -12,13 +12,12 @@ import {
   Lock,
   LogOut,
   User,
-  ExternalLink,
   CheckCircle2,
   Server,
-  ShoppingCart,
-  Terminal,
-  Code2,
-  Zap,
+  Smartphone,
+  Globe,
+  FileText,
+  Sliders,
 } from 'lucide-react';
 
 import { safeFetch } from './api';
@@ -32,9 +31,8 @@ import AuthModal from './components/AuthModal';
 import KycModal from './components/KycModal';
 import AdminDashboardModal from './components/AdminDashboardModal';
 import LegalModal from './components/LegalModal';
-import MerchantSimulatorModal from './components/MerchantSimulatorModal';
 
-// Defensive Error Boundary to eliminate any possibility of a blank screen
+// Top-level Error Boundary to eliminate white-screen crashes
 class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -52,14 +50,14 @@ class ErrorBoundary extends Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-[#0d1117] text-slate-100 flex items-center justify-center p-6">
-          <div className="max-w-md w-full p-6 bg-[#161b22] border border-[#30363d] rounded-xl text-center space-y-4">
+        <div className="min-h-screen bg-[#0A0E17] text-slate-100 flex items-center justify-center p-6">
+          <div className="max-w-md w-full p-6 bg-[#111827] border border-[#1F2937] rounded-xl text-center space-y-4 shadow-xl">
             <div className="w-12 h-12 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 mx-auto flex items-center justify-center">
               <ShieldAlert className="w-6 h-6" />
             </div>
-            <h2 className="text-base font-bold text-white">Interface Reload Required</h2>
+            <h2 className="text-base font-bold text-white">System Recovery</h2>
             <p className="text-xs text-slate-400 font-mono">
-              A temporary render state occurred. Click below to reset to clean developer state.
+              An unexpected render exception was caught. Click below to safely reset your session.
             </p>
             <button
               onClick={() => {
@@ -68,7 +66,7 @@ class ErrorBoundary extends Component {
               }}
               className="py-2 px-4 rounded-md bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs"
             >
-              Reload Developer Workspace
+              Reset Session
             </button>
           </div>
         </div>
@@ -95,7 +93,7 @@ function CoratechApp() {
   const [revealed, setRevealed] = useState(false);
   const [transactions, setTransactions] = useState([]);
   const [stats, setStats] = useState(null);
-  const [fxInfo, setFxInfo] = useState({ fx_rate: 15.50, fee_percent: 1.5 });
+  const [fxInfo, setFxInfo] = useState({ fx_rate: 11.55, fee_percent: 1.5 });
 
   // Modals
   const [showAuth, setShowAuth] = useState(false);
@@ -106,10 +104,26 @@ function CoratechApp() {
   const [showCashout, setShowCashout] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [showLegal, setShowLegal] = useState(false);
-  const [showSimulator, setShowSimulator] = useState(false);
   const [legalTab, setLegalTab] = useState('TERMS');
 
-  // Fetch FX Rate
+  // Secret admin route trigger (?admin=true or #admin or Ctrl+Shift+A)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('admin') === 'true' || window.location.hash === '#admin') {
+      setShowAdmin(true);
+    }
+
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+        e.preventDefault();
+        setShowAdmin((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Fetch FX Rate (defaults to 11.55 GHS)
   useEffect(() => {
     safeFetch('/api/fx-rate').then((res) => {
       if (res.ok && res.data) {
@@ -197,8 +211,7 @@ function CoratechApp() {
   const handleToggleFreeze = async () => {
     if (!activeCard) return;
     const newStatus = activeCard.status === 'FROZEN' ? 'ACTIVE' : 'FROZEN';
-    
-    // Optimistic update
+
     setCards((prev) =>
       prev.map((c) => (c.id === activeCard.id ? { ...c, status: newStatus } : c))
     );
@@ -208,13 +221,6 @@ function CoratechApp() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: newStatus }),
     });
-    fetchUserData();
-  };
-
-  const handleLaunchDemo = () => {
-    localStorage.setItem('coratech_demo_mode', 'true');
-    localStorage.setItem('coratech_token', 'demo_jwt_token_kwame');
-    setToken('demo_jwt_token_kwame');
     fetchUserData();
   };
 
@@ -242,109 +248,89 @@ function CoratechApp() {
   const activeCard = cards.find((c) => c.id === activeCardId) || cards[0];
 
   return (
-    <div className="min-h-screen bg-[#0d1117] text-slate-100 flex flex-col justify-between selection:bg-emerald-500/30 selection:text-emerald-300">
+    <div className="min-h-screen bg-[#0A0E17] text-slate-100 flex flex-col justify-between selection:bg-emerald-500/30 selection:text-emerald-300">
       <div>
-        {/* DEVELOPER NAVBAR (Stripe / GitHub / Linear style) */}
-        <header className="bg-[#161b22] border-b border-[#30363d] px-4 sm:px-8 py-3 flex items-center justify-between sticky top-0 z-40">
+        {/* CLEAN FINTECH NAVBAR (Mercury / Wise style) */}
+        <header className="bg-[#111827] border-b border-[#1F2937] px-4 sm:px-8 py-3.5 flex items-center justify-between sticky top-0 z-40">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-md bg-[#21262d] border border-[#30363d] flex items-center justify-center text-emerald-400 font-bold">
+            <div className="w-8 h-8 rounded-lg bg-[#1F2937] border border-[#374151] flex items-center justify-center text-emerald-400 font-bold">
               <CreditCard className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-sm tracking-tight text-white">Coratech</span>
-                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#21262d] text-slate-300 border border-[#30363d]">
-                  v2.4
-                </span>
-                <span className="hidden md:inline-flex items-center gap-1.5 text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Live Paystack Rails
+                <span className="font-bold text-base tracking-tight text-white">Coratech</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#1F2937] text-slate-300 border border-[#374151]">
+                  AfriVisa
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 font-mono hidden sm:block">
-                Ghana MoMo • Visa Platinum USD Infrastructure
+              <p className="text-[11px] text-slate-400 hidden sm:block">
+                Virtual Visa & Ghana Mobile Money Platform
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            {/* Live FX Rate */}
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#21262d] border border-[#30363d] text-xs font-mono text-slate-300">
-              <span className="text-slate-500">FX:</span>
+          <div className="flex items-center gap-3">
+            {/* Live Exchange Rate Pill */}
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1F2937] border border-[#374151] text-xs font-mono text-slate-300">
+              <span className="text-slate-400">Rate:</span>
               <span className="text-emerald-400 font-semibold">1 USD = {fxInfo.fx_rate} GHS</span>
             </div>
 
-            {/* Operator Console / Admin Button */}
-            <button
-              onClick={() => setShowAdmin(true)}
-              className="flex items-center gap-1.5 py-1.5 px-2.5 rounded-md bg-[#21262d] hover:bg-[#30363d] text-slate-200 text-xs font-mono border border-[#30363d] transition-colors"
-              title="Open Operator Admin Console"
-            >
-              <Shield className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden md:inline">Admin Portal</span>
-            </button>
-
             {currentUser ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <button
                   onClick={handleOpenIssueCard}
-                  className="flex items-center gap-1 py-1.5 px-3 rounded-md bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors"
+                  className="flex items-center gap-1.5 py-1.5 px-3.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Issue Card</span>
+                  <span>New Card</span>
                 </button>
 
-                <div className="flex items-center gap-2 pl-2 border-l border-[#30363d]">
-                  <div className="text-right hidden lg:block font-mono text-xs">
+                <div className="flex items-center gap-2 pl-2 border-l border-[#1F2937]">
+                  <div className="text-right hidden lg:block text-xs font-mono">
                     <p className="font-semibold text-white">{currentUser.full_name}</p>
-                    <p className="text-[10px] text-slate-400">{currentUser.phone_number}</p>
+                    <p className="text-[11px] text-slate-400">{currentUser.phone_number}</p>
                   </div>
                   <button
                     onClick={handleLogout}
-                    className="p-1.5 rounded-md bg-[#21262d] hover:bg-[#30363d] text-slate-400 hover:text-rose-400 border border-[#30363d] transition-colors"
+                    className="p-1.5 rounded-lg bg-[#1F2937] hover:bg-[#374151] text-slate-400 hover:text-rose-400 border border-[#374151] transition-colors"
                     title="Sign Out"
                   >
-                    <LogOut className="w-3.5 h-3.5" />
+                    <LogOut className="w-4 h-4" />
                   </button>
                 </div>
               </div>
             ) : (
               <div className="flex items-center gap-2">
                 <button
-                  onClick={handleLaunchDemo}
-                  className="hidden sm:flex items-center gap-1 py-1.5 px-3 rounded-md bg-[#21262d] hover:bg-[#30363d] text-emerald-400 text-xs font-mono border border-[#30363d] transition-colors"
-                >
-                  <Zap className="w-3.5 h-3.5" />
-                  <span>Interactive Demo</span>
-                </button>
-                <button
                   onClick={() => setShowAuth(true)}
-                  className="flex items-center gap-1.5 py-1.5 px-3.5 rounded-md bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors"
+                  className="py-1.5 px-4 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors"
                 >
-                  <User className="w-3.5 h-3.5" />
-                  <span>Sign In</span>
+                  Sign In / Register
                 </button>
               </div>
             )}
           </div>
         </header>
 
-        {/* KYC Notification Alert */}
+        {/* KYC Compliance Banner */}
         {currentUser && currentUser.kyc_status !== 'VERIFIED' && (
           <div className="max-w-6xl mx-auto px-4 sm:px-8 mt-4">
-            <div className="p-3 rounded-md bg-amber-500/10 border border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="p-3.5 rounded-lg bg-[#1c1809] border border-[#3f320b] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2.5 text-amber-300">
                 <ShieldAlert className="w-4 h-4 shrink-0 text-amber-400" />
                 <div>
-                  <span className="font-semibold block text-white font-mono">Tier-1 Ghana Card Verification Required</span>
-                  <span className="text-slate-400 text-[11px]">Bank of Ghana regulatory compliance requires Ghana Card registration prior to issuing international payment cards.</span>
+                  <span className="font-semibold block text-white">Identity Verification Required</span>
+                  <span className="text-slate-400 text-[11px]">
+                    To comply with Bank of Ghana guidelines, please register your Ghana Card before issuing payment cards.
+                  </span>
                 </div>
               </div>
               <button
                 onClick={() => setShowKyc(true)}
-                className="py-1 px-3 rounded-md bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs shrink-0 transition-colors"
+                className="py-1.5 px-3.5 rounded-md bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs shrink-0 transition-colors"
               >
-                Submit Ghana Card
+                Verify Ghana Card
               </button>
             </div>
           </div>
@@ -353,103 +339,77 @@ function CoratechApp() {
         {/* MAIN BODY CONTAINER */}
         <main className="max-w-6xl mx-auto px-4 sm:px-8 pt-6">
           {!currentUser ? (
-            /* CLEAN HUMAN DEVELOPER PRODUCT LANDING (Stripe / GitHub / Wise style) */
-            <div className="py-10 sm:py-16 max-w-4xl mx-auto">
-              <div className="text-center max-w-2xl mx-auto mb-12">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-[#161b22] border border-[#30363d] text-xs font-mono text-slate-300 mb-6">
-                  <Terminal className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Paystack MoMo Rails • Visa Platinum USD</span>
-                </div>
+            /* CLEAN CONSUMER FINTECH LANDING PAGE (Wise / Mercury style) */
+            <div className="py-12 sm:py-20 max-w-3xl mx-auto text-center">
+              <span className="inline-block px-3 py-1 rounded-full bg-[#111827] border border-[#1F2937] text-xs font-mono text-slate-300 mb-6">
+                Direct Mobile Money Rails • Visa Platinum USD
+              </span>
 
-                <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-tight mb-4">
-                  Virtual Visa cards funded directly via Ghana Mobile Money.
-                </h1>
-                <p className="text-sm text-slate-400 leading-relaxed mb-8">
-                  Issue 3D-Secure USD Visa cards denominated in dollars. Top up with MTN MoMo, Telecel Cash, or AT Money. Pay for AWS, GitHub Copilot, DigitalOcean, OpenAI, and overseas subscriptions without bank card rejections.
-                </p>
+              <h1 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight leading-tight mb-4">
+                Virtual Visa cards funded directly via Ghana Mobile Money.
+              </h1>
+              <p className="text-sm sm:text-base text-slate-400 leading-relaxed max-w-2xl mx-auto mb-8">
+                Issue 3D-Secure USD Visa debit cards for AWS, GitHub, Netflix, OpenAI, and overseas merchants. Top up instantly with MTN MoMo, Telecel Cash, or AT Money without foreign card declines.
+              </p>
 
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                  <button
-                    onClick={handleLaunchDemo}
-                    className="w-full sm:w-auto py-2.5 px-5 rounded-md bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors flex items-center justify-center gap-2"
-                  >
-                    <Zap className="w-4 h-4" />
-                    <span>Launch Interactive Demo</span>
-                  </button>
-                  <button
-                    onClick={() => setShowAuth(true)}
-                    className="w-full sm:w-auto py-2.5 px-5 rounded-md bg-[#161b22] hover:bg-[#21262d] text-slate-200 font-semibold text-xs border border-[#30363d] transition-colors flex items-center justify-center gap-2"
-                  >
-                    <span>Create Free Account</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => setShowAdmin(true)}
-                    className="w-full sm:w-auto py-2.5 px-4 rounded-md bg-[#21262d] hover:bg-[#30363d] text-slate-300 font-mono text-xs border border-[#30363d] transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <Shield className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Admin Back-Office</span>
-                  </button>
-                </div>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-16">
+                <button
+                  onClick={() => setShowAuth(true)}
+                  className="w-full sm:w-auto py-3 px-6 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <span>Get Started with Ghana MoMo</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => {
+                    setLegalTab('FEES');
+                    setShowLegal(true);
+                  }}
+                  className="w-full sm:w-auto py-3 px-6 rounded-lg bg-[#111827] hover:bg-[#1F2937] text-slate-300 font-semibold text-xs border border-[#1F2937] transition-colors"
+                >
+                  View Transparent Fee Schedule
+                </button>
               </div>
 
-              {/* Developer Technical Features */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
-                <div className="p-4 rounded-lg bg-[#161b22] border border-[#30363d]">
-                  <div className="w-8 h-8 rounded-md bg-[#21262d] flex items-center justify-center text-emerald-400 mb-3 border border-[#30363d]">
+              {/* 3 Clear Value Pillars */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
+                <div className="p-5 rounded-xl bg-[#111827] border border-[#1F2937]">
+                  <div className="w-9 h-9 rounded-lg bg-[#1F2937] flex items-center justify-center text-emerald-400 mb-3 border border-[#374151]">
                     <CreditCard className="w-4 h-4" />
                   </div>
-                  <h3 className="text-xs font-bold text-white mb-1">Instant Visa Minting</h3>
-                  <p className="text-[11px] text-slate-400 leading-relaxed">
-                    16-digit PAN, CVV2, and 3DS authentication ready in seconds following Ghana Card verification.
+                  <h3 className="text-sm font-bold text-white mb-1">Instant Visa Issuance</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Receive your 16-digit card number, CVV2, and 3DS authentication ready in seconds.
                   </p>
                 </div>
 
-                <div className="p-4 rounded-lg bg-[#161b22] border border-[#30363d]">
-                  <div className="w-8 h-8 rounded-md bg-[#21262d] flex items-center justify-center text-teal-400 mb-3 border border-[#30363d]">
-                    <ArrowDownLeft className="w-4 h-4" />
+                <div className="p-5 rounded-xl bg-[#111827] border border-[#1F2937]">
+                  <div className="w-9 h-9 rounded-lg bg-[#1F2937] flex items-center justify-center text-teal-400 mb-3 border border-[#374151]">
+                    <Smartphone className="w-4 h-4" />
                   </div>
-                  <h3 className="text-xs font-bold text-white mb-1">Direct MoMo Liquidity</h3>
-                  <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Fund cards instantly from MTN MoMo or Telecel Cash using automated Paystack webhook fulfillment.
+                  <h3 className="text-sm font-bold text-white mb-1">Direct MoMo Top-Up</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Convert GHS to USD via MTN MoMo, Telecel Cash, or AT Money at Bank of Ghana interbank rates.
                   </p>
                 </div>
 
-                <div className="p-4 rounded-lg bg-[#161b22] border border-[#30363d]">
-                  <div className="w-8 h-8 rounded-md bg-[#21262d] flex items-center justify-center text-cyan-400 mb-3 border border-[#30363d]">
+                <div className="p-5 rounded-xl bg-[#111827] border border-[#1F2937]">
+                  <div className="w-9 h-9 rounded-lg bg-[#1F2937] flex items-center justify-center text-cyan-400 mb-3 border border-[#374151]">
                     <Lock className="w-4 h-4" />
                   </div>
-                  <h3 className="text-xs font-bold text-white mb-1">Bank-Grade Controls</h3>
-                  <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Toggle freeze, customize daily transaction limits, and sweep remaining USD balances back to Ghana Cedi.
+                  <h3 className="text-sm font-bold text-white mb-1">Card Controls & Security</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Freeze or unlock cards instantly, set spending limits, or cash out remaining balances back to MoMo.
                   </p>
                 </div>
-              </div>
-
-              {/* API Integration Snippet */}
-              <div className="p-5 rounded-lg bg-[#161b22] border border-[#30363d]">
-                <div className="flex items-center justify-between pb-3 border-b border-[#30363d] text-xs font-mono text-slate-400">
-                  <div className="flex items-center gap-2">
-                    <Code2 className="w-4 h-4 text-emerald-400" />
-                    <span>developer_example.sh</span>
-                  </div>
-                  <span>cURL API</span>
-                </div>
-                <pre className="p-3 text-[11px] font-mono text-emerald-400 overflow-x-auto">
-{`# Issue a new virtual card funded via Paystack Ghana MoMo
-curl -X POST https://api.coratech.dev/api/cards \\
-  -H "Authorization: Bearer <CORATECH_JWT>" \\
-  -H "Content-Type: application/json" \\
-  -d '{"card_type": "VISA_PLATINUM_USD", "initial_topup_ghs": 775.00}'`}
-                </pre>
               </div>
             </div>
           ) : (
-            /* AUTHENTICATED DEVELOPER DASHBOARD */
+            /* AUTHENTICATED BANKING DASHBOARD */
             <div className="space-y-6">
-              {/* TOP METRICS GRID (Developer density) */}
+              {/* TOP FINANCIAL METRICS */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="p-4 rounded-lg bg-[#161b22] border border-[#30363d]">
+                <div className="p-4 rounded-xl bg-[#111827] border border-[#1F2937]">
                   <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
                     <span>Card Balance</span>
                     <DollarSign className="w-4 h-4 text-emerald-400" />
@@ -462,55 +422,55 @@ curl -X POST https://api.coratech.dev/api/cards \\
                   </p>
                 </div>
 
-                <div className="p-4 rounded-lg bg-[#161b22] border border-[#30363d]">
+                <div className="p-4 rounded-xl bg-[#111827] border border-[#1F2937]">
                   <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-                    <span>MoMo Total Loaded</span>
+                    <span>Total MoMo Loaded</span>
                     <ArrowDownLeft className="w-4 h-4 text-teal-400" />
                   </div>
                   <p className="text-xl font-bold text-white font-mono">
                     ${(stats?.total_topup ?? 350.0).toFixed(2)}
                   </p>
-                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">Paystack settlement</p>
+                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">Paystack rails</p>
                 </div>
 
-                <div className="p-4 rounded-lg bg-[#161b22] border border-[#30363d]">
+                <div className="p-4 rounded-xl bg-[#111827] border border-[#1F2937]">
                   <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-                    <span>Online Spend</span>
+                    <span>Total Spend</span>
                     <ArrowUpRight className="w-4 h-4 text-slate-400" />
                   </div>
                   <p className="text-xl font-bold text-white font-mono">
                     ${(stats?.total_spent ?? 67.20).toFixed(2)}
                   </p>
-                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">AWS, GitHub, SaaS</p>
+                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">Online debits</p>
                 </div>
 
-                <div className="p-4 rounded-lg bg-[#161b22] border border-[#30363d]">
+                <div className="p-4 rounded-xl bg-[#111827] border border-[#1F2937]">
                   <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-                    <span>Active Virtual Cards</span>
+                    <span>Active Cards</span>
                     <CreditCard className="w-4 h-4 text-cyan-400" />
                   </div>
                   <p className="text-xl font-bold text-white font-mono">
                     {cards.length} Card{cards.length === 1 ? '' : 's'}
                   </p>
-                  <p className="text-[11px] text-emerald-400 font-mono mt-0.5">Visa 3DS Enabled</p>
+                  <p className="text-[11px] text-emerald-400 font-mono mt-0.5">Visa 3DS Active</p>
                 </div>
               </div>
 
-              {/* MAIN CONTENT SPLIT */}
+              {/* MAIN WORKSPACE SPLIT */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 {/* LEFT: PHYSICAL CARD & CONTROLS */}
                 <div className="lg:col-span-5 space-y-4">
-                  {/* Card Selector (if multiple cards) */}
+                  {/* Card Selector (if user owns multiple cards) */}
                   {cards.length > 1 && (
                     <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
                       {cards.map((c) => (
                         <button
                           key={c.id}
                           onClick={() => setActiveCardId(c.id)}
-                          className={`py-1 px-3 rounded-md text-xs font-mono transition-colors border ${
+                          className={`py-1 px-3 rounded-lg text-xs font-mono transition-colors border ${
                             activeCard?.id === c.id
-                              ? 'bg-[#21262d] text-white border-emerald-500'
-                              : 'bg-[#161b22] text-slate-400 border-[#30363d] hover:text-white'
+                              ? 'bg-[#1F2937] text-white border-emerald-500'
+                              : 'bg-[#111827] text-slate-400 border-[#1F2937] hover:text-white'
                           }`}
                         >
                           {c.cardholder_name} ({c.masked_number.slice(-4)})
@@ -519,7 +479,7 @@ curl -X POST https://api.coratech.dev/api/cards \\
                     </div>
                   )}
 
-                  {/* Visa Card Display */}
+                  {/* Visa Card 3D Display */}
                   <VirtualCard3D
                     card={activeCard}
                     details={cardDetails}
@@ -529,61 +489,32 @@ curl -X POST https://api.coratech.dev/api/cards \\
                     onOpenControls={() => setShowControls(true)}
                   />
 
-                  {/* Primary Action Button Grid */}
-                  <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                  {/* Primary Action Button Toolbar */}
+                  <div className="grid grid-cols-3 gap-2 text-xs font-mono">
                     <button
-                      onClick={() => setShowSimulator(true)}
-                      className="p-3 rounded-lg bg-[#161b22] hover:bg-[#21262d] border border-[#30363d] text-left transition-colors"
+                      onClick={() => setShowTopup(true)}
+                      className="p-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-center transition-colors shadow-sm"
                     >
-                      <div className="flex items-center gap-2 mb-1">
-                        <ShoppingCart className="w-4 h-4 text-emerald-400" />
-                        <span className="font-semibold text-white">Test Payment</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400">Simulate AWS or Netflix debit</p>
+                      <span>Top Up MoMo</span>
                     </button>
 
                     <button
                       onClick={handleToggleFreeze}
-                      className="p-3 rounded-lg bg-[#161b22] hover:bg-[#21262d] border border-[#30363d] text-left transition-colors"
+                      className="p-3 rounded-lg bg-[#111827] hover:bg-[#1F2937] border border-[#1F2937] text-slate-200 text-center transition-colors font-semibold"
                     >
-                      <div className="flex items-center gap-2 mb-1">
-                        {activeCard?.status === 'FROZEN' ? (
-                          <Snowflake className="w-4 h-4 text-sky-400" />
-                        ) : (
-                          <Lock className="w-4 h-4 text-slate-400" />
-                        )}
-                        <span className="font-semibold text-white">
-                          {activeCard?.status === 'FROZEN' ? 'Unfreeze' : 'Freeze Card'}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-400">Instant authorization lock</p>
+                      <span>{activeCard?.status === 'FROZEN' ? 'Unlock Card' : 'Freeze Card'}</span>
                     </button>
 
                     <button
                       onClick={() => setShowControls(true)}
-                      className="p-3 rounded-lg bg-[#161b22] hover:bg-[#21262d] border border-[#30363d] text-left transition-colors"
+                      className="p-3 rounded-lg bg-[#111827] hover:bg-[#1F2937] border border-[#1F2937] text-slate-200 text-center transition-colors font-semibold"
                     >
-                      <div className="flex items-center gap-2 mb-1">
-                        <Shield className="w-4 h-4 text-slate-400" />
-                        <span className="font-semibold text-white">Card Limits</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400">Configure spend ceiling</p>
-                    </button>
-
-                    <button
-                      onClick={() => setShowCashout(true)}
-                      className="p-3 rounded-lg bg-[#161b22] hover:bg-[#21262d] border border-[#30363d] text-left transition-colors"
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <ArrowUpRight className="w-4 h-4 text-slate-400" />
-                        <span className="font-semibold text-white">MoMo Cashout</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400">Sweep balance back to GHS</p>
+                      <span>Card Limits</span>
                     </button>
                   </div>
 
                   {/* Card Telemetry Details */}
-                  <div className="p-3.5 rounded-lg bg-[#161b22] border border-[#30363d] text-xs font-mono space-y-2">
+                  <div className="p-4 rounded-xl bg-[#111827] border border-[#1F2937] text-xs font-mono space-y-2">
                     <div className="flex justify-between text-slate-400">
                       <span>Card Status:</span>
                       <span className="text-emerald-400 font-semibold">{activeCard?.status || 'ACTIVE'}</span>
@@ -596,12 +527,12 @@ curl -X POST https://api.coratech.dev/api/cards \\
                     </div>
                     <div className="flex justify-between text-slate-400">
                       <span>Billing Country:</span>
-                      <span className="text-white">Ghana (GH) • 3DS Verified</span>
+                      <span className="text-white">Ghana (GH) • Visa 3DS</span>
                     </div>
                   </div>
                 </div>
 
-                {/* RIGHT: TRANSACTION LEDGER */}
+                {/* RIGHT: REAL TRANSACTION LEDGER */}
                 <div className="lg:col-span-7">
                   <TransactionLedger transactions={transactions} />
                 </div>
@@ -611,17 +542,17 @@ curl -X POST https://api.coratech.dev/api/cards \\
         </main>
       </div>
 
-      {/* DEVELOPER FOOTER */}
-      <footer className="mt-16 border-t border-[#30363d] py-6 text-xs text-slate-400 font-mono bg-[#161b22]">
+      {/* CLEAN FOOTER (Without Admin Portal Button) */}
+      <footer className="mt-16 border-t border-[#1F2937] py-6 text-xs text-slate-500 font-mono bg-[#111827]">
         <div className="max-w-6xl mx-auto px-4 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p>© 2026 Coratech Global. Paystack Ghana rails • Neon PostgreSQL.</p>
+          <p>© 2026 Coratech Global. Powered by Paystack Ghana & Neon PostgreSQL.</p>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <button
               onClick={() => {
                 setLegalTab('TERMS');
                 setShowLegal(true);
               }}
-              className="hover:text-white transition-colors"
+              className="hover:text-slate-300 transition-colors"
             >
               Terms of Service
             </button>
@@ -631,9 +562,9 @@ curl -X POST https://api.coratech.dev/api/cards \\
                 setLegalTab('PRIVACY');
                 setShowLegal(true);
               }}
-              className="hover:text-white transition-colors"
+              className="hover:text-slate-300 transition-colors"
             >
-              Privacy
+              Privacy Policy
             </button>
             <span>•</span>
             <button
@@ -641,17 +572,9 @@ curl -X POST https://api.coratech.dev/api/cards \\
                 setLegalTab('FEES');
                 setShowLegal(true);
               }}
-              className="hover:text-white transition-colors"
+              className="hover:text-slate-300 transition-colors"
             >
               Fee Schedule
-            </button>
-            <span>•</span>
-            <button
-              onClick={() => setShowAdmin(true)}
-              className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-semibold transition-colors"
-            >
-              <Shield className="w-3.5 h-3.5" />
-              <span>Operator Console</span>
             </button>
           </div>
         </div>
@@ -709,13 +632,6 @@ curl -X POST https://api.coratech.dev/api/cards \\
       <AdminDashboardModal
         isOpen={showAdmin}
         onClose={() => setShowAdmin(false)}
-      />
-
-      <MerchantSimulatorModal
-        card={activeCard}
-        isOpen={showSimulator}
-        onClose={() => setShowSimulator(false)}
-        onSuccess={() => fetchUserData()}
       />
 
       <LegalModal
