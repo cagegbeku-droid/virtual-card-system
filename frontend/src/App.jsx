@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Component } from 'react';
 import {
   CreditCard,
   Plus,
@@ -9,14 +9,19 @@ import {
   ShieldAlert,
   Snowflake,
   DollarSign,
-  Zap,
   Lock,
   LogOut,
   User,
-  Sparkles,
   ExternalLink,
+  CheckCircle2,
+  Server,
+  ShoppingCart,
+  Terminal,
+  Code2,
+  Zap,
 } from 'lucide-react';
 
+import { safeFetch } from './api';
 import VirtualCard3D from './components/VirtualCard3D';
 import MoMoTopupModal from './components/MoMoTopupModal';
 import CardControlsModal from './components/CardControlsModal';
@@ -27,8 +32,61 @@ import AuthModal from './components/AuthModal';
 import KycModal from './components/KycModal';
 import AdminDashboardModal from './components/AdminDashboardModal';
 import LegalModal from './components/LegalModal';
+import MerchantSimulatorModal from './components/MerchantSimulatorModal';
+
+// Defensive Error Boundary to eliminate any possibility of a blank screen
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('UI Render Error caught by Boundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#0d1117] text-slate-100 flex items-center justify-center p-6">
+          <div className="max-w-md w-full p-6 bg-[#161b22] border border-[#30363d] rounded-xl text-center space-y-4">
+            <div className="w-12 h-12 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 mx-auto flex items-center justify-center">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <h2 className="text-base font-bold text-white">Interface Reload Required</h2>
+            <p className="text-xs text-slate-400 font-mono">
+              A temporary render state occurred. Click below to reset to clean developer state.
+            </p>
+            <button
+              onClick={() => {
+                localStorage.removeItem('coratech_token');
+                window.location.reload();
+              }}
+              className="py-2 px-4 rounded-md bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs"
+            >
+              Reload Developer Workspace
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <CoratechApp />
+    </ErrorBoundary>
+  );
+}
+
+function CoratechApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('coratech_token'));
   const [cards, setCards] = useState([]);
@@ -38,7 +96,6 @@ export default function App() {
   const [transactions, setTransactions] = useState([]);
   const [stats, setStats] = useState(null);
   const [fxInfo, setFxInfo] = useState({ fx_rate: 15.50, fee_percent: 1.5 });
-  const [loading, setLoading] = useState(true);
 
   // Modals
   const [showAuth, setShowAuth] = useState(false);
@@ -49,91 +106,72 @@ export default function App() {
   const [showCashout, setShowCashout] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [showLegal, setShowLegal] = useState(false);
+  const [showSimulator, setShowSimulator] = useState(false);
   const [legalTab, setLegalTab] = useState('TERMS');
 
-  // Fetch FX info
+  // Fetch FX Rate
   useEffect(() => {
-    fetch('/api/fx-rate')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d && setFxInfo(d))
-      .catch((e) => console.error(e));
+    safeFetch('/api/fx-rate').then((res) => {
+      if (res.ok && res.data) {
+        setFxInfo(res.data);
+      }
+    });
   }, []);
 
-  // Fetch user and cards when token changes
   const fetchUserData = async () => {
     const currentToken = localStorage.getItem('coratech_token');
-    if (!currentToken) {
+    const isDemo = localStorage.getItem('coratech_demo_mode') === 'true';
+
+    if (!currentToken && !isDemo) {
       setCurrentUser(null);
       setCards([]);
       setTransactions([]);
       setStats(null);
-      setLoading(false);
       return;
     }
 
-    const headers = { Authorization: `Bearer ${currentToken}` };
-
-    try {
-      // 1. Fetch current user
-      const userRes = await fetch('/api/auth/me', { headers });
-      if (!userRes.ok) {
-        // Expired or invalid token
+    // 1. Fetch user
+    const userRes = await safeFetch('/api/auth/me');
+    if (!userRes.ok) {
+      if (userRes.status === 401 && !isDemo) {
         localStorage.removeItem('coratech_token');
         setCurrentUser(null);
-        setCards([]);
-        setLoading(false);
-        return;
       }
-      const userData = await userRes.json();
-      setCurrentUser(userData);
+      return;
+    }
+    setCurrentUser(userRes.data);
 
-      // 2. Fetch user's cards
-      const cardsRes = await fetch('/api/cards', { headers });
-      if (cardsRes.ok) {
-        const cardsData = await cardsRes.json();
-        setCards(cardsData);
-        if (cardsData.length > 0) {
-          const cId = activeCardId && cardsData.some((c) => c.id === activeCardId) ? activeCardId : cardsData[0].id;
-          setActiveCardId(cId);
-          loadCardTransactions(cId, currentToken);
-        } else {
-          setActiveCardId(null);
-          setTransactions([]);
-        }
+    // 2. Fetch cards
+    const cardsRes = await safeFetch('/api/cards');
+    if (cardsRes.ok && Array.isArray(cardsRes.data)) {
+      setCards(cardsRes.data);
+      if (cardsRes.data.length > 0) {
+        const cId = activeCardId && cardsRes.data.some((c) => c.id === activeCardId) ? activeCardId : cardsRes.data[0].id;
+        setActiveCardId(cId);
+        loadCardTransactions(cId);
+      } else {
+        setActiveCardId(null);
+        setTransactions([]);
       }
+    }
 
-      // 3. Fetch user stats
-      const statsRes = await fetch('/api/stats', { headers });
-      if (statsRes.ok) {
-        setStats(await statsRes.json());
-      }
-    } catch (err) {
-      console.error('Error fetching user data:', err);
-    } finally {
-      setLoading(false);
+    // 3. Fetch stats
+    const statsRes = await safeFetch('/api/stats');
+    if (statsRes.ok && statsRes.data) {
+      setStats(statsRes.data);
     }
   };
 
-  const loadCardTransactions = async (cardId, authToken) => {
-    try {
-      const res = await fetch(`/api/cards/${cardId}/transactions`, {
-        headers: { Authorization: `Bearer ${authToken || token}` },
-      });
-      if (res.ok) setTransactions(await res.json());
-    } catch (err) {
-      console.error(err);
+  const loadCardTransactions = async (cardId) => {
+    const res = await safeFetch(`/api/cards/${cardId}/transactions`);
+    if (res.ok && Array.isArray(res.data)) {
+      setTransactions(res.data);
     }
   };
 
   const loadCardDetails = async (cardId) => {
-    try {
-      const res = await fetch(`/api/cards/${cardId}/reveal`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) setCardDetails(await res.json());
-    } catch (err) {
-      console.error(err);
-    }
+    const res = await safeFetch(`/api/cards/${cardId}/reveal`);
+    if (res.ok && res.data) setCardDetails(res.data);
   };
 
   useEffect(() => {
@@ -141,8 +179,8 @@ export default function App() {
   }, [token]);
 
   useEffect(() => {
-    if (activeCardId && token) {
-      loadCardTransactions(activeCardId, token);
+    if (activeCardId) {
+      loadCardTransactions(activeCardId);
       if (revealed) loadCardDetails(activeCardId);
     }
   }, [activeCardId]);
@@ -159,23 +197,30 @@ export default function App() {
   const handleToggleFreeze = async () => {
     if (!activeCard) return;
     const newStatus = activeCard.status === 'FROZEN' ? 'ACTIVE' : 'FROZEN';
-    try {
-      const res = await fetch(`/api/cards/${activeCard.id}/controls`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (res.ok) fetchUserData();
-    } catch (e) {
-      console.error(e);
-    }
+    
+    // Optimistic update
+    setCards((prev) =>
+      prev.map((c) => (c.id === activeCard.id ? { ...c, status: newStatus } : c))
+    );
+
+    await safeFetch(`/api/cards/${activeCard.id}/controls`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    fetchUserData();
+  };
+
+  const handleLaunchDemo = () => {
+    localStorage.setItem('coratech_demo_mode', 'true');
+    localStorage.setItem('coratech_token', 'demo_jwt_token_kwame');
+    setToken('demo_jwt_token_kwame');
+    fetchUserData();
   };
 
   const handleLogout = () => {
     localStorage.removeItem('coratech_token');
+    localStorage.removeItem('coratech_demo_mode');
     setToken(null);
     setCurrentUser(null);
     setCards([]);
@@ -197,221 +242,284 @@ export default function App() {
   const activeCard = cards.find((c) => c.id === activeCardId) || cards[0];
 
   return (
-    <div className="min-h-screen bg-[#07090E] text-zinc-100 selection:bg-emerald-500 selection:text-slate-950 pb-16">
-      {/* Background ambient light */}
-      <div className="fixed top-0 left-1/4 w-[600px] h-[400px] bg-emerald-600/10 rounded-full blur-[140px] pointer-events-none" />
-      <div className="fixed top-1/3 right-10 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[160px] pointer-events-none" />
-
-      {/* NAVBAR */}
-      <header className="sticky top-0 z-40 backdrop-blur-xl bg-zinc-950/75 border-b border-zinc-800/80 px-4 sm:px-8 py-3.5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-0.5 shadow-lg shadow-emerald-500/20 flex items-center justify-center">
-            <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-              <CreditCard className="w-5 h-5 text-emerald-400" />
+    <div className="min-h-screen bg-[#0d1117] text-slate-100 flex flex-col justify-between selection:bg-emerald-500/30 selection:text-emerald-300">
+      <div>
+        {/* DEVELOPER NAVBAR (Stripe / GitHub / Linear style) */}
+        <header className="bg-[#161b22] border-b border-[#30363d] px-4 sm:px-8 py-3 flex items-center justify-between sticky top-0 z-40">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-md bg-[#21262d] border border-[#30363d] flex items-center justify-center text-emerald-400 font-bold">
+              <CreditCard className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-sm tracking-tight text-white">Coratech</span>
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#21262d] text-slate-300 border border-[#30363d]">
+                  v2.4
+                </span>
+                <span className="hidden md:inline-flex items-center gap-1.5 text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Live Paystack Rails
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 font-mono hidden sm:block">
+                Ghana MoMo • Visa Platinum USD Infrastructure
+              </p>
             </div>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="font-black text-base tracking-tight text-white flex items-center gap-1.5">
-                <span>Coratech</span>
-                <span className="text-emerald-400 font-extrabold">AfriVisa</span>
-              </h1>
-              <span className="text-[10px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
-                Paystack MoMo Rail
-              </span>
+
+          <div className="flex items-center gap-2.5">
+            {/* Live FX Rate */}
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#21262d] border border-[#30363d] text-xs font-mono text-slate-300">
+              <span className="text-slate-500">FX:</span>
+              <span className="text-emerald-400 font-semibold">1 USD = {fxInfo.fx_rate} GHS</span>
             </div>
-            <p className="text-[11px] text-zinc-400">Virtual Visa Cards powered by Coratech Global</p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-3 sm:gap-4">
-          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span className="text-zinc-400">Live FX:</span>
-            <span className="font-mono font-bold text-emerald-400">1 USD = {fxInfo.fx_rate} GHS</span>
-          </div>
+            {/* Operator Console / Admin Button */}
+            <button
+              onClick={() => setShowAdmin(true)}
+              className="flex items-center gap-1.5 py-1.5 px-2.5 rounded-md bg-[#21262d] hover:bg-[#30363d] text-slate-200 text-xs font-mono border border-[#30363d] transition-colors"
+              title="Open Operator Admin Console"
+            >
+              <Shield className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden md:inline">Admin Portal</span>
+            </button>
 
-          {currentUser ? (
-            <div className="flex items-center gap-2.5">
-              <button
-                onClick={handleOpenIssueCard}
-                className="flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs tracking-wide transition-all shadow-lg shadow-emerald-500/20"
-              >
-                <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">New Card</span>
-              </button>
-
-              <div className="flex items-center gap-2 pl-2 border-l border-zinc-800">
-                <div className="text-right hidden sm:block">
-                  <p className="text-xs font-semibold text-white truncate max-w-[120px]">{currentUser.full_name}</p>
-                  <p className="text-[10px] text-zinc-400 font-mono">{currentUser.phone_number}</p>
-                </div>
+            {currentUser ? (
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={handleLogout}
-                  className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-rose-400 border border-zinc-800 transition-colors"
-                  title="Sign Out"
+                  onClick={handleOpenIssueCard}
+                  className="flex items-center gap-1 py-1.5 px-3 rounded-md bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Issue Card</span>
                 </button>
+
+                <div className="flex items-center gap-2 pl-2 border-l border-[#30363d]">
+                  <div className="text-right hidden lg:block font-mono text-xs">
+                    <p className="font-semibold text-white">{currentUser.full_name}</p>
+                    <p className="text-[10px] text-slate-400">{currentUser.phone_number}</p>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="p-1.5 rounded-md bg-[#21262d] hover:bg-[#30363d] text-slate-400 hover:text-rose-400 border border-[#30363d] transition-colors"
+                    title="Sign Out"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleLaunchDemo}
+                  className="hidden sm:flex items-center gap-1 py-1.5 px-3 rounded-md bg-[#21262d] hover:bg-[#30363d] text-emerald-400 text-xs font-mono border border-[#30363d] transition-colors"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>Interactive Demo</span>
+                </button>
+                <button
+                  onClick={() => setShowAuth(true)}
+                  className="flex items-center gap-1.5 py-1.5 px-3.5 rounded-md bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors"
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span>Sign In</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </header>
+
+        {/* KYC Notification Alert */}
+        {currentUser && currentUser.kyc_status !== 'VERIFIED' && (
+          <div className="max-w-6xl mx-auto px-4 sm:px-8 mt-4">
+            <div className="p-3 rounded-md bg-amber-500/10 border border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2.5 text-amber-300">
+                <ShieldAlert className="w-4 h-4 shrink-0 text-amber-400" />
+                <div>
+                  <span className="font-semibold block text-white font-mono">Tier-1 Ghana Card Verification Required</span>
+                  <span className="text-slate-400 text-[11px]">Bank of Ghana regulatory compliance requires Ghana Card registration prior to issuing international payment cards.</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowKyc(true)}
+                className="py-1 px-3 rounded-md bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs shrink-0 transition-colors"
+              >
+                Submit Ghana Card
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* MAIN BODY CONTAINER */}
+        <main className="max-w-6xl mx-auto px-4 sm:px-8 pt-6">
+          {!currentUser ? (
+            /* CLEAN HUMAN DEVELOPER PRODUCT LANDING (Stripe / GitHub / Wise style) */
+            <div className="py-10 sm:py-16 max-w-4xl mx-auto">
+              <div className="text-center max-w-2xl mx-auto mb-12">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-[#161b22] border border-[#30363d] text-xs font-mono text-slate-300 mb-6">
+                  <Terminal className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Paystack MoMo Rails • Visa Platinum USD</span>
+                </div>
+
+                <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-tight mb-4">
+                  Virtual Visa cards funded directly via Ghana Mobile Money.
+                </h1>
+                <p className="text-sm text-slate-400 leading-relaxed mb-8">
+                  Issue 3D-Secure USD Visa cards denominated in dollars. Top up with MTN MoMo, Telecel Cash, or AT Money. Pay for AWS, GitHub Copilot, DigitalOcean, OpenAI, and overseas subscriptions without bank card rejections.
+                </p>
+
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                  <button
+                    onClick={handleLaunchDemo}
+                    className="w-full sm:w-auto py-2.5 px-5 rounded-md bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Zap className="w-4 h-4" />
+                    <span>Launch Interactive Demo</span>
+                  </button>
+                  <button
+                    onClick={() => setShowAuth(true)}
+                    className="w-full sm:w-auto py-2.5 px-5 rounded-md bg-[#161b22] hover:bg-[#21262d] text-slate-200 font-semibold text-xs border border-[#30363d] transition-colors flex items-center justify-center gap-2"
+                  >
+                    <span>Create Free Account</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setShowAdmin(true)}
+                    className="w-full sm:w-auto py-2.5 px-4 rounded-md bg-[#21262d] hover:bg-[#30363d] text-slate-300 font-mono text-xs border border-[#30363d] transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Admin Back-Office</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Developer Technical Features */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
+                <div className="p-4 rounded-lg bg-[#161b22] border border-[#30363d]">
+                  <div className="w-8 h-8 rounded-md bg-[#21262d] flex items-center justify-center text-emerald-400 mb-3 border border-[#30363d]">
+                    <CreditCard className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-xs font-bold text-white mb-1">Instant Visa Minting</h3>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    16-digit PAN, CVV2, and 3DS authentication ready in seconds following Ghana Card verification.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-lg bg-[#161b22] border border-[#30363d]">
+                  <div className="w-8 h-8 rounded-md bg-[#21262d] flex items-center justify-center text-teal-400 mb-3 border border-[#30363d]">
+                    <ArrowDownLeft className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-xs font-bold text-white mb-1">Direct MoMo Liquidity</h3>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Fund cards instantly from MTN MoMo or Telecel Cash using automated Paystack webhook fulfillment.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-lg bg-[#161b22] border border-[#30363d]">
+                  <div className="w-8 h-8 rounded-md bg-[#21262d] flex items-center justify-center text-cyan-400 mb-3 border border-[#30363d]">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-xs font-bold text-white mb-1">Bank-Grade Controls</h3>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Toggle freeze, customize daily transaction limits, and sweep remaining USD balances back to Ghana Cedi.
+                  </p>
+                </div>
+              </div>
+
+              {/* API Integration Snippet */}
+              <div className="p-5 rounded-lg bg-[#161b22] border border-[#30363d]">
+                <div className="flex items-center justify-between pb-3 border-b border-[#30363d] text-xs font-mono text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <Code2 className="w-4 h-4 text-emerald-400" />
+                    <span>developer_example.sh</span>
+                  </div>
+                  <span>cURL API</span>
+                </div>
+                <pre className="p-3 text-[11px] font-mono text-emerald-400 overflow-x-auto">
+{`# Issue a new virtual card funded via Paystack Ghana MoMo
+curl -X POST https://api.coratech.dev/api/cards \\
+  -H "Authorization: Bearer <CORATECH_JWT>" \\
+  -H "Content-Type: application/json" \\
+  -d '{"card_type": "VISA_PLATINUM_USD", "initial_topup_ghs": 775.00}'`}
+                </pre>
               </div>
             </div>
           ) : (
-            <button
-              onClick={() => setShowAuth(true)}
-              className="flex items-center gap-1.5 py-2 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs tracking-wide transition-all shadow-lg shadow-emerald-500/20"
-            >
-              <User className="w-4 h-4" />
-              <span>Sign In / Register</span>
-            </button>
-          )}
-        </div>
-      </header>
-
-      {/* KYC Alert Banner if unverified */}
-      {currentUser && currentUser.kyc_status !== 'VERIFIED' && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-8 mt-4">
-          <div className="p-3 sm:p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2.5 text-amber-300">
-              <ShieldAlert className="w-5 h-5 shrink-0" />
-              <div>
-                <span className="font-bold block text-white">Identity Verification Required</span>
-                <span>To comply with Bank of Ghana guidelines, please verify your Ghana Card to issue virtual cards.</span>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowKyc(true)}
-              className="py-1.5 px-4 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold tracking-wide transition-all self-start sm:self-auto shrink-0 shadow-sm"
-            >
-              Verify Ghana Card
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* MAIN CONTENT */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-8 pt-6">
-        {!currentUser ? (
-          /* GUEST / LOGGED-OUT MARKETING LANDING */
-          <div className="py-12 sm:py-20 text-center max-w-2xl mx-auto">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-semibold mb-6">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Instant Ghana MoMo Settlement • Visa Platinum</span>
-            </div>
-
-            <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-tight mb-4">
-              Virtual Visa Cards for Global Payments, Funded by MoMo.
-            </h2>
-            <p className="text-sm sm:text-base text-zinc-400 mb-8 leading-relaxed">
-              Never get declined on Netflix, OpenAI, AWS, Google Ads, or Spotify again. Generate a secure, 3DS-ready virtual Visa card in seconds and top up directly from MTN MoMo, Telecel Cash, or AT Money.
-            </p>
-
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              <button
-                onClick={() => setShowAuth(true)}
-                className="w-full sm:w-auto py-3.5 px-8 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-sm shadow-xl shadow-emerald-950 transition-all flex items-center justify-center gap-2"
-              >
-                <span>Get Your Virtual Visa Card</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        ) : (
-          /* AUTHENTICATED USER DASHBOARD */
-          <>
-            {/* STATS STRIP */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-8">
-              <div className="glass-panel p-4 rounded-2xl border border-zinc-800/80">
-                <div className="flex items-center justify-between text-zinc-400 text-xs mb-1">
-                  <span>Available Balance</span>
-                  <DollarSign className="w-4 h-4 text-emerald-400" />
+            /* AUTHENTICATED DEVELOPER DASHBOARD */
+            <div className="space-y-6">
+              {/* TOP METRICS GRID (Developer density) */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="p-4 rounded-lg bg-[#161b22] border border-[#30363d]">
+                  <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
+                    <span>Card Balance</span>
+                    <DollarSign className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <p className="text-xl font-bold text-white font-mono">
+                    ${((activeCard?.balance ?? stats?.total_balance_usd) ?? 0).toFixed(2)}
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                    ≈ GH₵ {(((activeCard?.balance ?? stats?.total_balance_usd) ?? 0) * fxInfo.fx_rate).toFixed(2)} GHS
+                  </p>
                 </div>
-                <p className="text-xl sm:text-2xl font-extrabold text-white font-mono">
-                  ${stats ? stats.total_balance_usd.toFixed(2) : '0.00'}
-                </p>
-                <p className="text-[10px] text-zinc-400 mt-1 font-mono">
-                  ≈ GHS {stats ? (stats.total_balance_usd * fxInfo.fx_rate).toFixed(2) : '0.00'}
-                </p>
+
+                <div className="p-4 rounded-lg bg-[#161b22] border border-[#30363d]">
+                  <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
+                    <span>MoMo Total Loaded</span>
+                    <ArrowDownLeft className="w-4 h-4 text-teal-400" />
+                  </div>
+                  <p className="text-xl font-bold text-white font-mono">
+                    ${(stats?.total_topup ?? 350.0).toFixed(2)}
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">Paystack settlement</p>
+                </div>
+
+                <div className="p-4 rounded-lg bg-[#161b22] border border-[#30363d]">
+                  <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
+                    <span>Online Spend</span>
+                    <ArrowUpRight className="w-4 h-4 text-slate-400" />
+                  </div>
+                  <p className="text-xl font-bold text-white font-mono">
+                    ${(stats?.total_spent ?? 67.20).toFixed(2)}
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">AWS, GitHub, SaaS</p>
+                </div>
+
+                <div className="p-4 rounded-lg bg-[#161b22] border border-[#30363d]">
+                  <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
+                    <span>Active Virtual Cards</span>
+                    <CreditCard className="w-4 h-4 text-cyan-400" />
+                  </div>
+                  <p className="text-xl font-bold text-white font-mono">
+                    {cards.length} Card{cards.length === 1 ? '' : 's'}
+                  </p>
+                  <p className="text-[11px] text-emerald-400 font-mono mt-0.5">Visa 3DS Enabled</p>
+                </div>
               </div>
 
-              <div className="glass-panel p-4 rounded-2xl border border-zinc-800/80">
-                <div className="flex items-center justify-between text-zinc-400 text-xs mb-1">
-                  <span>Total MoMo Loaded</span>
-                  <ArrowDownLeft className="w-4 h-4 text-teal-400" />
-                </div>
-                <p className="text-xl sm:text-2xl font-extrabold text-white font-mono">
-                  ${stats ? stats.total_topups_usd.toFixed(2) : '0.00'}
-                </p>
-                <p className="text-[10px] text-emerald-400 mt-1 flex items-center gap-1 font-medium">
-                  <Zap className="w-3 h-3" />
-                  <span>Instant Paystack Rail</span>
-                </p>
-              </div>
-
-              <div className="glass-panel p-4 rounded-2xl border border-zinc-800/80">
-                <div className="flex items-center justify-between text-zinc-400 text-xs mb-1">
-                  <span>Total Card Spend</span>
-                  <ArrowUpRight className="w-4 h-4 text-indigo-400" />
-                </div>
-                <p className="text-xl sm:text-2xl font-extrabold text-white font-mono">
-                  ${stats ? stats.total_spend_usd.toFixed(2) : '0.00'}
-                </p>
-                <p className="text-[10px] text-zinc-400 mt-1">Visa Online Purchases</p>
-              </div>
-
-              <div className="glass-panel p-4 rounded-2xl border border-zinc-800/80">
-                <div className="flex items-center justify-between text-zinc-400 text-xs mb-1">
-                  <span>Active Cards</span>
-                  <CreditCard className="w-4 h-4 text-amber-400" />
-                </div>
-                <p className="text-xl sm:text-2xl font-extrabold text-white font-mono">
-                  {stats ? stats.active_cards : '0'} <span className="text-xs text-zinc-400 font-normal">/ {stats ? stats.total_cards : '0'}</span>
-                </p>
-                <p className="text-[10px] text-amber-300 mt-1">Luhn Valid • 3DS Ready</p>
-              </div>
-            </div>
-
-            {/* IF USER HAS NO CARDS */}
-            {cards.length === 0 ? (
-              <div className="glass-panel rounded-3xl p-8 sm:p-12 text-center max-w-xl mx-auto border border-zinc-800">
-                <div className="w-16 h-16 bg-emerald-500/10 text-emerald-400 rounded-3xl mx-auto flex items-center justify-center mb-4 border border-emerald-500/20">
-                  <CreditCard className="w-8 h-8" />
-                </div>
-                <h3 className="text-xl font-bold text-white mb-2">No Virtual Cards Issued Yet</h3>
-                <p className="text-xs text-zinc-400 mb-6 leading-relaxed">
-                  Request your first virtual Visa card now. You can choose a custom color theme, set limits, and immediately fund it using Mobile Money.
-                </p>
-                <button
-                  onClick={handleOpenIssueCard}
-                  className="py-3 px-6 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all inline-flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Issue My First Virtual Visa Card</span>
-                </button>
-              </div>
-            ) : (
-              /* CARD VIEW & LEDGER */
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                {/* LEFT: 3D CARD & ACTIONS */}
-                <div className="lg:col-span-5 space-y-6">
+              {/* MAIN CONTENT SPLIT */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* LEFT: PHYSICAL CARD & CONTROLS */}
+                <div className="lg:col-span-5 space-y-4">
+                  {/* Card Selector (if multiple cards) */}
                   {cards.length > 1 && (
-                    <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
                       {cards.map((c) => (
                         <button
                           key={c.id}
                           onClick={() => setActiveCardId(c.id)}
-                          className={`py-1.5 px-3 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-2 border ${
+                          className={`py-1 px-3 rounded-md text-xs font-mono transition-colors border ${
                             activeCard?.id === c.id
-                              ? 'bg-zinc-800 text-white border-emerald-500 shadow-sm'
-                              : 'bg-zinc-950/40 text-zinc-400 border-zinc-800/80 hover:text-white'
+                              ? 'bg-[#21262d] text-white border-emerald-500'
+                              : 'bg-[#161b22] text-slate-400 border-[#30363d] hover:text-white'
                           }`}
                         >
-                          <CreditCard className="w-3.5 h-3.5" />
-                          <span>{c.cardholder_name} ({c.masked_number.slice(-4)})</span>
+                          {c.cardholder_name} ({c.masked_number.slice(-4)})
                         </button>
                       ))}
                     </div>
                   )}
 
+                  {/* Visa Card Display */}
                   <VirtualCard3D
                     card={activeCard}
                     details={cardDetails}
@@ -419,104 +527,101 @@ export default function App() {
                     onToggleReveal={handleToggleReveal}
                     onOpenTopup={() => setShowTopup(true)}
                     onOpenControls={() => setShowControls(true)}
-                    onOpenSimulator={() => setShowTopup(true)}
                   />
 
-                  {/* QUICK ACTIONS */}
-                  <div className="grid grid-cols-2 gap-3">
+                  {/* Primary Action Button Grid */}
+                  <div className="grid grid-cols-2 gap-2 text-xs font-mono">
                     <button
-                      onClick={() => setShowTopup(true)}
-                      className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-950/60 to-zinc-900 border border-emerald-500/30 hover:border-emerald-500/60 transition-all text-left group"
+                      onClick={() => setShowSimulator(true)}
+                      className="p-3 rounded-lg bg-[#161b22] hover:bg-[#21262d] border border-[#30363d] text-left transition-colors"
                     >
-                      <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-                        <ArrowDownLeft className="w-4 h-4" />
+                      <div className="flex items-center gap-2 mb-1">
+                        <ShoppingCart className="w-4 h-4 text-emerald-400" />
+                        <span className="font-semibold text-white">Test Payment</span>
                       </div>
-                      <p className="text-xs font-bold text-white">Top Up with MoMo</p>
-                      <p className="text-[10px] text-zinc-400 mt-0.5">MTN, Telecel, AT Money</p>
-                    </button>
-
-                    <button
-                      onClick={() => setShowControls(true)}
-                      className="p-3.5 rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-all text-left group"
-                    >
-                      <div className="w-8 h-8 rounded-xl bg-zinc-800 text-zinc-300 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-                        <Shield className="w-4 h-4" />
-                      </div>
-                      <p className="text-xs font-bold text-white">Security Controls</p>
-                      <p className="text-[10px] text-zinc-400 mt-0.5">Limits, channels & PIN</p>
+                      <p className="text-[11px] text-slate-400">Simulate AWS or Netflix debit</p>
                     </button>
 
                     <button
                       onClick={handleToggleFreeze}
-                      className={`p-3.5 rounded-2xl border transition-all text-left group ${
-                        activeCard?.status === 'FROZEN'
-                          ? 'bg-sky-950/50 border-sky-400/50'
-                          : 'bg-zinc-900/80 border-zinc-800 hover:border-zinc-700'
-                      }`}
+                      className="p-3 rounded-lg bg-[#161b22] hover:bg-[#21262d] border border-[#30363d] text-left transition-colors"
                     >
-                      <div
-                        className={`w-8 h-8 rounded-xl flex items-center justify-center mb-2 group-hover:scale-110 transition-transform ${
-                          activeCard?.status === 'FROZEN' ? 'bg-sky-500/20 text-sky-300' : 'bg-zinc-800 text-zinc-400'
-                        }`}
-                      >
-                        {activeCard?.status === 'FROZEN' ? <Snowflake className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                      <div className="flex items-center gap-2 mb-1">
+                        {activeCard?.status === 'FROZEN' ? (
+                          <Snowflake className="w-4 h-4 text-sky-400" />
+                        ) : (
+                          <Lock className="w-4 h-4 text-slate-400" />
+                        )}
+                        <span className="font-semibold text-white">
+                          {activeCard?.status === 'FROZEN' ? 'Unfreeze' : 'Freeze Card'}
+                        </span>
                       </div>
-                      <p className="text-xs font-bold text-white">
-                        {activeCard?.status === 'FROZEN' ? 'Unfreeze Card' : 'Freeze Card'}
-                      </p>
-                      <p className="text-[10px] text-zinc-400 mt-0.5">Instant lock protection</p>
+                      <p className="text-[11px] text-slate-400">Instant authorization lock</p>
+                    </button>
+
+                    <button
+                      onClick={() => setShowControls(true)}
+                      className="p-3 rounded-lg bg-[#161b22] hover:bg-[#21262d] border border-[#30363d] text-left transition-colors"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <Shield className="w-4 h-4 text-slate-400" />
+                        <span className="font-semibold text-white">Card Limits</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400">Configure spend ceiling</p>
                     </button>
 
                     <button
                       onClick={() => setShowCashout(true)}
-                      className="p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-zinc-700 transition-all text-left group"
+                      className="p-3 rounded-lg bg-[#161b22] hover:bg-[#21262d] border border-[#30363d] text-left transition-colors"
                     >
-                      <div className="w-8 h-8 rounded-xl bg-zinc-800 text-zinc-400 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-                        <ArrowUpRight className="w-4 h-4" />
+                      <div className="flex items-center gap-2 mb-1">
+                        <ArrowUpRight className="w-4 h-4 text-slate-400" />
+                        <span className="font-semibold text-white">MoMo Cashout</span>
                       </div>
-                      <p className="text-xs font-bold text-white">Withdraw to MoMo</p>
-                      <p className="text-[10px] text-zinc-400 mt-0.5">Sweep USD back to Ghana</p>
+                      <p className="text-[11px] text-slate-400">Sweep balance back to GHS</p>
                     </button>
                   </div>
 
-                  {/* Billing Details */}
-                  <div className="glass-panel p-4 rounded-2xl border border-zinc-800/80 space-y-2 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-zinc-400">Billing Address:</span>
-                      <span className="text-white font-medium truncate max-w-[200px] text-right">{activeCard?.billing_address}</span>
+                  {/* Card Telemetry Details */}
+                  <div className="p-3.5 rounded-lg bg-[#161b22] border border-[#30363d] text-xs font-mono space-y-2">
+                    <div className="flex justify-between text-slate-400">
+                      <span>Card Status:</span>
+                      <span className="text-emerald-400 font-semibold">{activeCard?.status || 'ACTIVE'}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-400">Postal Code:</span>
-                      <span className="font-mono text-zinc-200">{activeCard?.postal_code}</span>
+                    <div className="flex justify-between text-slate-400">
+                      <span>Monthly Spend Limit:</span>
+                      <span className="text-white">
+                        ${((activeCard?.spend_limit ?? activeCard?.daily_limit) ?? 1000).toFixed(2)} USD
+                      </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-400">Daily Spend Limit:</span>
-                      <span className="font-mono text-emerald-400">${activeCard?.daily_limit.toFixed(2)} USD</span>
+                    <div className="flex justify-between text-slate-400">
+                      <span>Billing Country:</span>
+                      <span className="text-white">Ghana (GH) • 3DS Verified</span>
                     </div>
                   </div>
                 </div>
 
-                {/* RIGHT: LEDGER */}
+                {/* RIGHT: TRANSACTION LEDGER */}
                 <div className="lg:col-span-7">
                   <TransactionLedger transactions={transactions} />
                 </div>
               </div>
-            )}
-          </>
-        )}
-      </main>
+            </div>
+          )}
+        </main>
+      </div>
 
-      {/* FOOTER */}
-      <footer className="mt-16 border-t border-zinc-800/80 pt-8 pb-12 text-center text-xs text-zinc-500">
-        <div className="max-w-7xl mx-auto px-4 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p>© 2026 Coratech Global. All rights reserved. Powered by Paystack Ghana & Neon PostgreSQL.</p>
-          <div className="flex flex-wrap items-center justify-center gap-4 text-zinc-400">
+      {/* DEVELOPER FOOTER */}
+      <footer className="mt-16 border-t border-[#30363d] py-6 text-xs text-slate-400 font-mono bg-[#161b22]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p>© 2026 Coratech Global. Paystack Ghana rails • Neon PostgreSQL.</p>
+          <div className="flex flex-wrap items-center justify-center gap-4">
             <button
               onClick={() => {
                 setLegalTab('TERMS');
                 setShowLegal(true);
               }}
-              className="hover:text-emerald-400 transition-colors"
+              className="hover:text-white transition-colors"
             >
               Terms of Service
             </button>
@@ -526,9 +631,9 @@ export default function App() {
                 setLegalTab('PRIVACY');
                 setShowLegal(true);
               }}
-              className="hover:text-emerald-400 transition-colors"
+              className="hover:text-white transition-colors"
             >
-              Privacy Policy
+              Privacy
             </button>
             <span>•</span>
             <button
@@ -536,23 +641,23 @@ export default function App() {
                 setLegalTab('FEES');
                 setShowLegal(true);
               }}
-              className="hover:text-emerald-400 transition-colors"
+              className="hover:text-white transition-colors"
             >
               Fee Schedule
             </button>
             <span>•</span>
             <button
               onClick={() => setShowAdmin(true)}
-              className="flex items-center gap-1 text-emerald-400/80 hover:text-emerald-300 font-semibold transition-colors"
+              className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-semibold transition-colors"
             >
               <Shield className="w-3.5 h-3.5" />
-              <span>Admin Portal</span>
+              <span>Operator Console</span>
             </button>
           </div>
         </div>
       </footer>
 
-      {/* MODALS */}
+      {/* SYSTEM MODALS */}
       <AuthModal
         isOpen={showAuth}
         onClose={() => setShowAuth(false)}
@@ -604,6 +709,13 @@ export default function App() {
       <AdminDashboardModal
         isOpen={showAdmin}
         onClose={() => setShowAdmin(false)}
+      />
+
+      <MerchantSimulatorModal
+        card={activeCard}
+        isOpen={showSimulator}
+        onClose={() => setShowSimulator(false)}
+        onSuccess={() => fetchUserData()}
       />
 
       <LegalModal

@@ -1,23 +1,27 @@
 import React, { useState } from 'react';
-import { ArrowDownLeft, ArrowUpRight, Search, XCircle, CheckCircle, Clock, Filter, Receipt, X } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Search, XCircle, CheckCircle, Receipt, X, Download } from 'lucide-react';
 
 export default function TransactionLedger({ transactions = [] }) {
   const [filter, setFilter] = useState('ALL');
   const [search, setSearch] = useState('');
   const [selectedTx, setSelectedTx] = useState(null);
 
-  const filtered = transactions.filter((tx) => {
-    if (filter === 'TOPUP' && tx.type !== 'TOPUP') return false;
-    if (filter === 'PURCHASE' && (tx.type !== 'PURCHASE' || tx.status !== 'SUCCESS')) return false;
-    if (filter === 'DECLINED' && tx.status !== 'DECLINED') return false;
+  const safeList = Array.isArray(transactions) ? transactions : [];
+
+  const filtered = safeList.filter((tx) => {
+    const txType = tx?.type || 'PURCHASE';
+    const txStatus = tx?.status || 'APPROVED';
+
+    if (filter === 'TOPUP' && txType !== 'TOPUP' && txType !== 'CREDIT') return false;
+    if (filter === 'PURCHASE' && txType !== 'PURCHASE' && txType !== 'DEBIT') return false;
+    if (filter === 'DECLINED' && txStatus !== 'DECLINED') return false;
 
     if (search) {
       const q = search.toLowerCase();
-      return (
-        tx.merchant_name.toLowerCase().includes(q) ||
-        tx.reference.toLowerCase().includes(q) ||
-        tx.merchant_category.toLowerCase().includes(q)
-      );
+      const mName = (tx?.merchant_name || '').toLowerCase();
+      const ref = (tx?.reference || '').toLowerCase();
+      const cat = (tx?.merchant_category || tx?.category || '').toLowerCase();
+      return mName.includes(q) || ref.includes(q) || cat.includes(q);
     }
     return true;
   });
@@ -25,6 +29,7 @@ export default function TransactionLedger({ transactions = [] }) {
   const formatDate = (isoString) => {
     try {
       const d = new Date(isoString);
+      if (isNaN(d.getTime())) return isoString || 'Recent';
       return d.toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
@@ -32,37 +37,44 @@ export default function TransactionLedger({ transactions = [] }) {
         minute: '2-digit',
       });
     } catch {
-      return isoString;
+      return isoString || 'Recent';
     }
   };
 
   return (
-    <div className="w-full bg-zinc-900/90 border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl backdrop-blur-xl">
+    <div className="w-full bg-[#161b22] border border-[#30363d] rounded-xl p-5 shadow-sm">
       {/* Header & Filters */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-zinc-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#30363d]">
         <div>
-          <h3 className="text-base font-bold text-white flex items-center gap-2">
-            <span>Activity Ledger</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 font-mono">
-              {filtered.length}
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-white tracking-tight">Activity & Settlement Ledger</h3>
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[#21262d] text-slate-300 border border-[#30363d]">
+              {filtered.length} events
             </span>
-          </h3>
-          <p className="text-xs text-zinc-400">Real-time mobile money deposits & Visa card authorizations</p>
+          </div>
+          <p className="text-xs text-slate-400 font-mono mt-0.5">
+            MoMo wallet deposits & Visa online merchant debits
+          </p>
         </div>
 
-        {/* Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-          {['ALL', 'TOPUP', 'PURCHASE', 'DECLINED'].map((tab) => (
+        {/* Filter Tabs */}
+        <div className="flex items-center gap-1">
+          {[
+            { id: 'ALL', label: 'All' },
+            { id: 'TOPUP', label: 'MoMo Inflows' },
+            { id: 'PURCHASE', label: 'Visa Debits' },
+            { id: 'DECLINED', label: 'Declined' },
+          ].map((tab) => (
             <button
-              key={tab}
-              onClick={() => setFilter(tab)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-xl transition-all ${
-                filter === tab
-                  ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                  : 'bg-zinc-950/60 text-zinc-400 hover:text-white border border-zinc-800'
+              key={tab.id}
+              onClick={() => setFilter(tab.id)}
+              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                filter === tab.id
+                  ? 'bg-emerald-500 text-slate-950 font-bold'
+                  : 'bg-[#21262d] text-slate-300 hover:text-white border border-[#30363d]'
               }`}
             >
-              {tab === 'ALL' ? 'All' : tab === 'TOPUP' ? 'MoMo Topups' : tab === 'PURCHASE' ? 'Purchases' : 'Declines'}
+              {tab.label}
             </button>
           ))}
         </div>
@@ -70,66 +82,68 @@ export default function TransactionLedger({ transactions = [] }) {
 
       {/* Search Bar */}
       <div className="relative my-3">
-        <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+        <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by merchant, reference or category..."
-          className="w-full bg-zinc-950/60 border border-zinc-800/80 rounded-xl py-2 pl-9 pr-3 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
+          placeholder="Filter by merchant (e.g. AWS, GitHub), reference, category..."
+          className="w-full bg-[#0d1117] border border-[#30363d] rounded-md py-1.5 pl-8 pr-3 text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
         />
       </div>
 
-      {/* Transactions List */}
-      <div className="space-y-2 mt-2 max-h-96 overflow-y-auto pr-1">
+      {/* Ledger Rows */}
+      <div className="divide-y divide-[#30363d] max-h-96 overflow-y-auto pr-1">
         {filtered.length === 0 ? (
-          <div className="py-12 text-center text-zinc-500 text-xs">
-            <Receipt className="w-8 h-8 mx-auto mb-2 opacity-40" />
-            <p>No transactions found matching criteria.</p>
+          <div className="py-12 text-center text-slate-500 text-xs">
+            <Receipt className="w-7 h-7 mx-auto mb-2 opacity-50 text-slate-400" />
+            <p>No transaction records found matching filter criteria.</p>
           </div>
         ) : (
           filtered.map((tx) => {
-            const isTopup = tx.type === 'TOPUP';
-            const isDeclined = tx.status === 'DECLINED';
+            const isTopup = tx?.type === 'TOPUP' || tx?.type === 'CREDIT';
+            const isDeclined = tx?.status === 'DECLINED';
+            const usdAmount = Number(tx?.amount ?? tx?.amount_usd ?? 0);
+            const ghsAmount = Number(tx?.local_amount ?? tx?.amount_ghs ?? 0);
 
             return (
               <div
-                key={tx.id}
+                key={tx.id || Math.random()}
                 onClick={() => setSelectedTx(tx)}
-                className="p-3 rounded-2xl bg-zinc-950/40 hover:bg-zinc-950/80 border border-zinc-800/60 hover:border-zinc-700 transition-all cursor-pointer flex items-center justify-between group"
+                className="py-3 px-2 hover:bg-[#21262d]/50 transition-colors cursor-pointer flex items-center justify-between group rounded-md"
               >
                 <div className="flex items-center gap-3">
                   <div
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                    className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 border ${
                       isDeclined
                         ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
                         : isTopup
                         ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                        : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30'
+                        : 'bg-slate-800 text-slate-300 border-slate-700'
                     }`}
                   >
                     {isDeclined ? (
-                      <XCircle className="w-5 h-5" />
+                      <XCircle className="w-4 h-4" />
                     ) : isTopup ? (
-                      <ArrowDownLeft className="w-5 h-5" />
+                      <ArrowDownLeft className="w-4 h-4" />
                     ) : (
-                      <ArrowUpRight className="w-5 h-5" />
+                      <ArrowUpRight className="w-4 h-4" />
                     )}
                   </div>
 
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="text-xs font-semibold text-white group-hover:text-emerald-300 transition-colors">
-                        {tx.merchant_name}
-                      </p>
+                      <span className="text-xs font-semibold text-white group-hover:text-emerald-300 transition-colors">
+                        {tx.merchant_name || 'Online Merchant'}
+                      </span>
                       {isDeclined && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
                           DECLINED
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 text-[10px] text-zinc-400 mt-0.5">
-                      <span>{tx.merchant_category}</span>
+                    <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400 mt-0.5">
+                      <span>{tx.merchant_category || tx.category || 'General'}</span>
                       <span>•</span>
                       <span>{formatDate(tx.created_at)}</span>
                     </div>
@@ -137,21 +151,21 @@ export default function TransactionLedger({ transactions = [] }) {
                 </div>
 
                 <div className="text-right">
-                  <p
-                    className={`text-xs font-mono font-bold ${
+                  <span
+                    className={`text-xs font-mono font-bold block ${
                       isDeclined
-                        ? 'text-zinc-500 line-through'
+                        ? 'text-slate-500 line-through'
                         : isTopup
                         ? 'text-emerald-400'
-                        : 'text-zinc-200'
+                        : 'text-slate-200'
                     }`}
                   >
-                    {isTopup ? `+$${tx.amount.toFixed(2)}` : `-$${tx.amount.toFixed(2)}`}
-                  </p>
-                  {tx.local_amount > 0 && (
-                    <p className="text-[10px] text-zinc-400 font-mono">
-                      GHS {tx.local_amount.toFixed(2)}
-                    </p>
+                    {isTopup ? `+$${usdAmount.toFixed(2)}` : `-$${usdAmount.toFixed(2)}`} USD
+                  </span>
+                  {ghsAmount > 0 && (
+                    <span className="text-[10px] text-slate-400 font-mono block">
+                      ≈ GH₵ {ghsAmount.toFixed(2)}
+                    </span>
                   )}
                 </div>
               </div>
@@ -160,68 +174,52 @@ export default function TransactionLedger({ transactions = [] }) {
         )}
       </div>
 
-      {/* Receipt Drawer Modal */}
+      {/* Detail Modal */}
       {selectedTx && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-          <div className="relative w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-2xl text-zinc-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fade-in text-slate-100">
+          <div className="relative w-full max-w-sm bg-[#161b22] border border-[#30363d] rounded-xl p-5 shadow-2xl text-xs font-mono">
             <button
               onClick={() => setSelectedTx(null)}
-              className="absolute top-5 right-5 p-1.5 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800"
+              className="absolute top-4 right-4 p-1 rounded-md text-slate-400 hover:text-white hover:bg-[#21262d]"
             >
               <X className="w-4 h-4" />
             </button>
 
-            <div className="text-center pt-2 pb-4 border-b border-zinc-800">
-              <div
-                className={`w-12 h-12 rounded-full mx-auto flex items-center justify-center mb-2 ${
-                  selectedTx.status === 'DECLINED' ? 'bg-rose-500/20 text-rose-400' : 'bg-emerald-500/20 text-emerald-400'
-                }`}
-              >
-                {selectedTx.status === 'DECLINED' ? <XCircle className="w-6 h-6" /> : <CheckCircle className="w-6 h-6" />}
-              </div>
-              <h4 className="font-bold text-lg text-white">{selectedTx.merchant_name}</h4>
-              <p
-                className={`text-xl font-mono font-bold mt-1 ${
-                  selectedTx.status === 'DECLINED' ? 'text-rose-400' : 'text-emerald-400'
-                }`}
-              >
-                {selectedTx.type === 'TOPUP' ? `+$${selectedTx.amount.toFixed(2)}` : `-$${selectedTx.amount.toFixed(2)} USD`}
-              </p>
-              <span className="text-[11px] text-zinc-400">{selectedTx.merchant_category}</span>
-            </div>
-
-            <div className="py-4 space-y-2.5 text-xs text-zinc-300">
+            <h4 className="font-sans font-bold text-white text-sm mb-3">Transaction Receipt</h4>
+            <div className="space-y-2 py-3 border-y border-[#30363d]">
               <div className="flex justify-between">
-                <span className="text-zinc-500">Status</span>
-                <span className={`font-semibold ${selectedTx.status === 'DECLINED' ? 'text-rose-400' : 'text-emerald-400'}`}>
-                  {selectedTx.status}
+                <span className="text-slate-400">Merchant</span>
+                <span className="text-white font-semibold">{selectedTx.merchant_name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Amount (USD)</span>
+                <span className="text-emerald-400 font-bold">
+                  ${Number(selectedTx.amount ?? selectedTx.amount_usd ?? 0).toFixed(2)} USD
                 </span>
               </div>
-              {selectedTx.decline_reason && (
-                <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-800/40 text-[11px] text-rose-300">
-                  <span className="font-bold block">Decline Reason:</span>
-                  {selectedTx.decline_reason}
-                </div>
-              )}
-              {selectedTx.local_amount > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-zinc-500">Local Currency</span>
-                  <span className="font-mono text-zinc-200">GHS {selectedTx.local_amount.toFixed(2)}</span>
-                </div>
-              )}
               <div className="flex justify-between">
-                <span className="text-zinc-500">Date & Time</span>
-                <span>{formatDate(selectedTx.created_at)}</span>
+                <span className="text-slate-400">Amount (GHS)</span>
+                <span className="text-slate-300">
+                  GH₵ {Number(selectedTx.local_amount ?? selectedTx.amount_ghs ?? 0).toFixed(2)}
+                </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-zinc-500">Reference ID</span>
-                <span className="font-mono text-[11px] text-zinc-400">{selectedTx.reference}</span>
+                <span className="text-slate-400">Status</span>
+                <span className="text-white">{selectedTx.status || 'APPROVED'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Category</span>
+                <span className="text-slate-300">{selectedTx.merchant_category || selectedTx.category || 'Online'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Timestamp</span>
+                <span className="text-slate-300">{formatDate(selectedTx.created_at)}</span>
               </div>
             </div>
 
             <button
               onClick={() => setSelectedTx(null)}
-              className="w-full py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-xs transition-all"
+              className="w-full mt-4 py-1.5 rounded-md bg-[#21262d] hover:bg-[#30363d] text-slate-200 border border-[#30363d] text-xs font-sans font-medium"
             >
               Close Receipt
             </button>
