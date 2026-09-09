@@ -1,8 +1,12 @@
 import os
+import io
+import csv
+import random
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, Depends, HTTPException, Query, Request, status, Header
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
@@ -23,6 +27,7 @@ from services.card_issuer_service import (
     fund_provider_card,
     freeze_provider_card,
 )
+from services.sms_service import send_sms_otp
 
 # Initialize DB tables
 init_db()
@@ -481,3 +486,180 @@ def get_user_stats(current_user: User = Depends(get_current_user), db: Session =
         "total_topups_usd": round(total_topups, 2),
         "fx_usd_to_ghs": FX_USD_TO_GHS,
     }
+
+# ----------------- SMS OTP Phone Verification -----------------
+@app.post("/api/auth/send-otp")
+def send_phone_otp(payload: schemas.OtpSendRequest, db: Session = Depends(get_db)):
+    clean_phone = payload.phone_number.strip().replace(" ", "").replace("-", "")
+    user = db.query(User).filter(User.phone_number == clean_phone).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    otp = f"{random.randint(100000, 999999)}"
+    user.otp_code = otp
+    user.otp_expires_at = datetime.utcnow() + timedelta(minutes=10)
+    db.commit()
+
+    sms_res = send_sms_otp(clean_phone, otp)
+    return {"status": "success", "message": "OTP sent via SMS", "delivery": sms_res}
+
+@app.post("/api/auth/verify-otp")
+def verify_phone_otp(payload: schemas.OtpVerifyRequest, db: Session = Depends(get_db)):
+    clean_phone = payload.phone_number.strip().replace(" ", "").replace("-", "")
+    user = db.query(User).filter(User.phone_number == clean_phone).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if not user.otp_code or user.otp_code != payload.otp_code.strip():
+        raise HTTPException(status_code=400, detail="Invalid OTP code")
+    
+    if user.otp_expires_at and datetime.utcnow() > user.otp_expires_at:
+        raise HTTPException(status_code=400, detail="OTP code expired. Please request a new code.")
+    
+    user.phone_verified = True
+    user.otp_code = None
+    db.commit()
+    return {"status": "success", "message": "Phone number verified successfully!", "phone_verified": True}
+
+# ----------------- Coratech Executive Admin Dashboard -----------------
+ADMIN_SECRET_KEY = os.getenv("ADMIN_SECRET_KEY", "coratech_admin_2026_supersecure")
+
+def verify_admin_access(x_admin_key: Optional[str] = Header(None)):
+    if not x_admin_key or x_admin_key != ADMIN_SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Unauthorized: Admin passcode required")
+    return True
+
+@app.get("/api/admin/overview")
+def get_admin_overview(_auth: bool = Depends(verify_admin_access), db: Session = Depends(get_db)):
+    total_users = db.query(User).count()
+    verified_users = db.query(User).filter(User.kyc_status == "VERIFIED").count()
+    pending_kyc = db.query(User).filter(User.kyc_status == "PENDING").count()
+    total_cards = db.query(VirtualCard).filter(VirtualCard.status != "TERMINATED").count()
+    active_cards = db.query(VirtualCard).filter(VirtualCard.status == "ACTIVE").count()
+    frozen_cards = db.query(VirtualCard).filter(VirtualCard.status == "FROZEN").count()
+
+    total_topup_volume_usd = (
+        db.query(func.sum(Transaction.amount))
+        .filter(Transaction.type == "TOPUP", Transaction.status == "SUCCESS")
+        .scalar()
+        or 0.0
+    )
+    total_momo_ghs_collected = (
+        db.query(func.sum(Transaction.local_amount))
+        .filter(Transaction.type == "TOPUP", Transaction.status == "SUCCESS")
+        .scalar()
+        or 0.0
+    )
+    total_card_spend_usd = (
+        db.query(func.sum(Transaction.amount))
+        .filter(Transaction.type == "PURCHASE", Transaction.status == "SUCCESS")
+        .scalar()
+        or 0.0
+    )
+
+    fx_spread_profit_usd = round(total_topup_volume_usd * 0.02, 2)
+    momo_fee_profit_usd = round(total_topup_volume_usd * 0.005, 2)
+    card_issuance_profit_usd = round(total_cards * 3.0, 2)
+    total_estimated_profit_usd = round(fx_spread_profit_usd + momo_fee_profit_usd + card_issuance_profit_usd, 2)
+
+    return {
+        "total_users": total_users,
+        "verified_users": verified_users,
+        "pending_kyc": pending_kyc,
+        "total_cards": total_cards,
+        "active_cards": active_cards,
+        "frozen_cards": frozen_cards,
+        "total_topup_usd": round(total_topup_volume_usd, 2),
+        "total_momo_ghs": round(total_momo_ghs_collected, 2),
+        "total_spend_usd": round(total_card_spend_usd, 2),
+        "profit": {
+            "fx_spread_usd": fx_spread_profit_usd,
+            "momo_fee_usd": momo_fee_profit_usd,
+            "card_issuance_usd": card_issuance_profit_usd,
+            "total_net_profit_usd": total_estimated_profit_usd,
+            "total_net_profit_ghs": round(total_estimated_profit_usd * FX_USD_TO_GHS, 2),
+        }
+    }
+
+@app.get("/api/admin/users")
+def get_admin_users(_auth: bool = Depends(verify_admin_access), db: Session = Depends(get_db)):
+    users = db.query(User).order_by(desc(User.created_at)).limit(100).all()
+    result = []
+    for u in users:
+        cards_count = len(u.cards)
+        total_balance = sum(c.balance for c in u.cards if c.status != "TERMINATED")
+        result.append({
+            "id": u.id,
+            "full_name": u.full_name,
+            "phone_number": u.phone_number,
+            "email": u.email,
+            "kyc_status": u.kyc_status,
+            "ghana_card_number": u.ghana_card_number,
+            "phone_verified": u.phone_verified,
+            "cards_count": cards_count,
+            "total_balance_usd": round(total_balance, 2),
+            "created_at": u.created_at,
+        })
+    return result
+
+@app.get("/api/admin/cards")
+def get_admin_cards(_auth: bool = Depends(verify_admin_access), db: Session = Depends(get_db)):
+    cards = db.query(VirtualCard).filter(VirtualCard.status != "TERMINATED").order_by(desc(VirtualCard.created_at)).all()
+    result = []
+    for c in cards:
+        result.append({
+            "id": c.id,
+            "user_id": c.user_id,
+            "cardholder_name": c.cardholder_name,
+            "masked_number": c.masked_number,
+            "balance": c.balance,
+            "currency": c.currency,
+            "status": c.status,
+            "color_theme": c.color_theme,
+            "daily_limit": c.daily_limit,
+            "created_at": c.created_at,
+        })
+    return result
+
+@app.post("/api/admin/card-toggle")
+def admin_card_toggle(payload: schemas.AdminCardToggleRequest, _auth: bool = Depends(verify_admin_access), db: Session = Depends(get_db)):
+    card = db.query(VirtualCard).filter(VirtualCard.id == payload.card_id).first()
+    if not card:
+        raise HTTPException(status_code=404, detail="Card not found")
+    
+    card.status = payload.status
+    db.commit()
+    return {"status": "success", "card_id": card.id, "new_status": card.status}
+
+@app.post("/api/admin/kyc-action")
+def admin_kyc_action(payload: schemas.KycActionRequest, _auth: bool = Depends(verify_admin_access), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == payload.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if payload.action == "APPROVE":
+        user.kyc_status = "VERIFIED"
+        user.kyc_rejection_reason = None
+    elif payload.action == "REJECT":
+        user.kyc_status = "REJECTED"
+        user.kyc_rejection_reason = payload.rejection_reason or "Document details could not be validated with NIA."
+    else:
+        raise HTTPException(status_code=400, detail="Action must be APPROVE or REJECT")
+    
+    db.commit()
+    return {"status": "success", "user_id": user.id, "kyc_status": user.kyc_status}
+
+@app.get("/api/admin/export-csv")
+def export_transactions_csv(_auth: bool = Depends(verify_admin_access), db: Session = Depends(get_db)):
+    txs = db.query(Transaction).order_by(desc(Transaction.created_at)).all()
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Reference", "User ID", "Card ID", "Type", "Amount USD", "Local Amount GHS", "Fee USD", "Merchant", "Category", "Status", "Date"])
+    for t in txs:
+        writer.writerow([t.reference, t.user_id, t.card_id, t.type, t.amount, t.local_amount, t.fee, t.merchant_name, t.merchant_category, t.status, t.created_at.isoformat()])
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=coratech_reconciliation_{datetime.utcnow().strftime('%Y%m%d')}.csv"}
+    )

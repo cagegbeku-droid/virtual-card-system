@@ -25,6 +25,8 @@ import CashoutModal from './components/CashoutModal';
 import TransactionLedger from './components/TransactionLedger';
 import AuthModal from './components/AuthModal';
 import KycModal from './components/KycModal';
+import AdminDashboardModal from './components/AdminDashboardModal';
+import LegalModal from './components/LegalModal';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -45,6 +47,9 @@ export default function App() {
   const [showControls, setShowControls] = useState(false);
   const [showIssue, setShowIssue] = useState(false);
   const [showCashout, setShowCashout] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [showLegal, setShowLegal] = useState(false);
+  const [legalTab, setLegalTab] = useState('TERMS');
 
   // Fetch FX info
   useEffect(() => {
@@ -501,6 +506,52 @@ export default function App() {
         )}
       </main>
 
+      {/* FOOTER */}
+      <footer className="mt-16 border-t border-zinc-800/80 pt-8 pb-12 text-center text-xs text-zinc-500">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p>© 2026 Coratech Global. All rights reserved. Powered by Paystack Ghana & Neon PostgreSQL.</p>
+          <div className="flex flex-wrap items-center justify-center gap-4 text-zinc-400">
+            <button
+              onClick={() => {
+                setLegalTab('TERMS');
+                setShowLegal(true);
+              }}
+              className="hover:text-emerald-400 transition-colors"
+            >
+              Terms of Service
+            </button>
+            <span>•</span>
+            <button
+              onClick={() => {
+                setLegalTab('PRIVACY');
+                setShowLegal(true);
+              }}
+              className="hover:text-emerald-400 transition-colors"
+            >
+              Privacy Policy
+            </button>
+            <span>•</span>
+            <button
+              onClick={() => {
+                setLegalTab('FEES');
+                setShowLegal(true);
+              }}
+              className="hover:text-emerald-400 transition-colors"
+            >
+              Fee Schedule
+            </button>
+            <span>•</span>
+            <button
+              onClick={() => setShowAdmin(true)}
+              className="flex items-center gap-1 text-emerald-400/80 hover:text-emerald-300 font-semibold transition-colors"
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>Admin Portal</span>
+            </button>
+          </div>
+        </div>
+      </footer>
+
       {/* MODALS */}
       <AuthModal
         isOpen={showAuth}
@@ -548,6 +599,17 @@ export default function App() {
         isOpen={showCashout}
         onClose={() => setShowCashout(false)}
         onSuccess={() => fetchUserData()}
+      />
+
+      <AdminDashboardModal
+        isOpen={showAdmin}
+        onClose={() => setShowAdmin(false)}
+      />
+
+      <LegalModal
+        isOpen={showLegal}
+        initialTab={legalTab}
+        onClose={() => setShowLegal(false)}
       />
     </div>
   );

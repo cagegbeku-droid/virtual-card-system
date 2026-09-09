@@ -17,6 +17,22 @@ class KycSubmitRequest(BaseModel):
     full_name: str = Field(..., min_length=3, max_length=100)
     dob: Optional[str] = None
 
+class OtpSendRequest(BaseModel):
+    phone_number: str = Field(..., min_length=9, max_length=20)
+
+class OtpVerifyRequest(BaseModel):
+    phone_number: str = Field(..., min_length=9, max_length=20)
+    otp_code: str = Field(..., min_length=4, max_length=10)
+
+class KycActionRequest(BaseModel):
+    user_id: str
+    action: str = Field(..., description="APPROVE or REJECT")
+    rejection_reason: Optional[str] = None
+
+class AdminCardToggleRequest(BaseModel):
+    card_id: str
+    status: str = Field(..., description="ACTIVE or FROZEN")
+
 class CardCreateRequest(BaseModel):
     cardholder_name: str = Field(..., min_length=3, max_length=60)
     color_theme: str = Field(default="cyber_neon")  # cyber_neon, obsidian, royal_gold, emerald

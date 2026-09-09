@@ -13,8 +13,13 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     full_name = Column(String(100), nullable=False)
     email = Column(String(100), nullable=True)
-    kyc_status = Column(String(20), default="UNVERIFIED")  # UNVERIFIED, PENDING, VERIFIED
+    kyc_status = Column(String(20), default="UNVERIFIED")  # UNVERIFIED, PENDING, VERIFIED, REJECTED
+    kyc_rejection_reason = Column(String(255), nullable=True)
     ghana_card_number = Column(String(30), nullable=True)
+    is_admin = Column(Boolean, default=False)
+    phone_verified = Column(Boolean, default=False)
+    otp_code = Column(String(10), nullable=True)
+    otp_expires_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
