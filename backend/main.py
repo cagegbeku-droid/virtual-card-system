@@ -81,18 +81,20 @@ def register(payload: schemas.UserRegisterRequest, db: Session = Depends(get_db)
     db.add(user)
     db.commit()
     db.refresh(user)
+    # Generate and dispatch Arkesel SMS OTP
+    otp = f"{random.randint(100000, 999999)}"
+    user.otp_code = otp
+    user.otp_expires_at = datetime.utcnow() + timedelta(minutes=10)
+    db.commit()
 
-    token = create_access_token(user.id, user.phone_number)
+    sms_res = send_sms_otp(clean_phone, otp)
+    print(f"[REGISTER SMS OTP] Dispatched code {otp} to {clean_phone}: {sms_res}")
+
     return {
-        "access_token": token,
-        "token_type": "bearer",
-        "user": {
-            "id": user.id,
-            "phone_number": user.phone_number,
-            "full_name": user.full_name,
-            "email": user.email,
-            "kyc_status": user.kyc_status,
-        },
+        "status": "success",
+        "message": "Account created. SMS verification code dispatched via Arkesel.",
+        "requires_verification": True,
+        "phone_number": user.phone_number,
     }
 
 @app.post("/api/auth/login")
@@ -521,7 +523,21 @@ def verify_phone_otp(payload: schemas.OtpVerifyRequest, db: Session = Depends(ge
     user.phone_verified = True
     user.otp_code = None
     db.commit()
-    return {"status": "success", "message": "Phone number verified successfully!", "phone_verified": True}
+
+    token = create_access_token(user.id, user.phone_number)
+    return {
+        "status": "success",
+        "message": "Phone number verified successfully!",
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "phone_number": user.phone_number,
+            "full_name": user.full_name,
+            "email": user.email,
+            "kyc_status": user.kyc_status,
+        },
+    }
 
 # ----------------- Coratech Executive Admin Dashboard -----------------
 ADMIN_SECRET_KEY = os.getenv("ADMIN_SECRET_KEY", "coratech_admin_2026_supersecure")
