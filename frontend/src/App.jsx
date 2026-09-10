@@ -15,12 +15,15 @@ import {
   Search,
   Bell,
   Settings,
-  Share2,
   MoreHorizontal,
   ChevronDown,
   LayoutDashboard,
   Users,
   ArrowLeftRight,
+  Sparkles,
+  ShieldCheck,
+  Send,
+  HelpCircle,
 } from 'lucide-react';
 
 import { safeFetch } from './api';
@@ -67,7 +70,7 @@ class ErrorBoundary extends Component {
                 localStorage.removeItem('coratech_token');
                 window.location.reload();
               }}
-              className="py-2 px-5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-colors"
+              className="py-2 px-5 rounded-xl bg-white hover:bg-slate-200 text-slate-950 font-bold text-xs transition-colors"
             >
               Reload Workspace
             </button>
@@ -97,8 +100,9 @@ function AfriVisaApp() {
   const [transactions, setTransactions] = useState([]);
   const [stats, setStats] = useState(null);
   const [fxInfo, setFxInfo] = useState({ fx_rate: 11.55, fee_percent: 1.5 });
-  const [activeNav, setActiveNav] = useState('DASHBOARD');
+  const [activeNav, setActiveNav] = useState('DASHBOARD'); // 'DASHBOARD' | 'VIRTUAL_CARDS' | 'TRANSACTIONS' | 'RECIPIENT' | 'SETTINGS'
   const [searchQuery, setSearchQuery] = useState('');
+  const [showNotifications, setShowNotifications] = useState(false);
 
   // Modals & Navigation
   const [showAuth, setShowAuth] = useState(false);
@@ -141,9 +145,9 @@ function AfriVisaApp() {
 
   const fetchUserData = async () => {
     const currentToken = localStorage.getItem('coratech_token');
-    const isDemo = localStorage.getItem('coratech_demo_mode') === 'true';
+    const storedUser = localStorage.getItem('coratech_user');
 
-    if (!currentToken && !isDemo) {
+    if (!currentToken && !storedUser) {
       setCurrentUser(null);
       setCards([]);
       setTransactions([]);
@@ -153,16 +157,15 @@ function AfriVisaApp() {
 
     // 1. Fetch user profile
     const userRes = await safeFetch('/api/auth/me');
-    if (!userRes.ok) {
-      if (userRes.status === 401 && !isDemo) {
-        localStorage.removeItem('coratech_token');
-        setCurrentUser(null);
-      }
-      return;
+    if (userRes.ok && userRes.data) {
+      setCurrentUser(userRes.data);
+    } else if (storedUser) {
+      try {
+        setCurrentUser(JSON.parse(storedUser));
+      } catch (e) {}
     }
-    setCurrentUser(userRes.data);
 
-    // 2. Fetch cards
+    // 2. Fetch cards (User only sees cards they have actually purchased)
     const cardsRes = await safeFetch('/api/cards');
     if (cardsRes.ok && Array.isArray(cardsRes.data)) {
       setCards(cardsRes.data);
@@ -187,6 +190,9 @@ function AfriVisaApp() {
     const res = await safeFetch(`/api/cards/${cardId}/transactions`);
     if (res.ok && Array.isArray(res.data)) {
       setTransactions(res.data);
+    } else {
+      const localTxs = JSON.parse(localStorage.getItem('afrivisa_txs') || '[]');
+      setTransactions(localTxs);
     }
   };
 
@@ -233,7 +239,7 @@ function AfriVisaApp() {
 
   const handleLogout = () => {
     localStorage.removeItem('coratech_token');
-    localStorage.removeItem('coratech_demo_mode');
+    localStorage.removeItem('coratech_user');
     setToken(null);
     setCurrentUser(null);
     setCards([]);
@@ -245,13 +251,9 @@ function AfriVisaApp() {
     setShowAuth(true);
   };
 
-  const handleOpenIssueCard = () => {
+  const handleOpenPurchaseCard = () => {
     if (!currentUser) {
       handleOpenAuth('REGISTER');
-      return;
-    }
-    if (currentUser.kyc_status !== 'VERIFIED') {
-      setShowKyc(true);
       return;
     }
     setShowIssue(true);
@@ -262,20 +264,16 @@ function AfriVisaApp() {
       handleOpenAuth('REGISTER');
       return;
     }
+    if (cards.length === 0) {
+      setShowIssue(true);
+      return;
+    }
     setTopupPresetNetwork(net);
     setShowTopup(true);
   };
 
-  const activeCard = cards.find((c) => c.id === activeCardId) || cards[0] || {
-    id: 'demo-card-1',
-    masked_number: '4512 7800 1234 5678',
-    cardholder_name: currentUser?.full_name?.toUpperCase() || 'OLUWASEUN ADESINA',
-    expiry_month: 9,
-    expiry_year: 27,
-    balance: 0.00,
-    status: 'ACTIVE',
-    color_theme: 'titanium',
-  };
+  // User has active card ONLY IF they have purchased one
+  const activeCard = cards.find((c) => c.id === activeCardId) || cards[0] || null;
 
   // Format dynamic date (e.g., "Current date | 10 Sep 2026")
   const currentDateFormatted = new Date().toLocaleDateString('en-GB', {
@@ -286,7 +284,7 @@ function AfriVisaApp() {
 
   return (
     <div
-      className="min-h-screen bg-[#070A10] text-slate-100 flex flex-col justify-between selection:bg-cyan-500/30 selection:text-cyan-300 relative overflow-x-hidden font-sans"
+      className="min-h-screen bg-[#070A10] text-slate-100 flex flex-col justify-between selection:bg-slate-700 selection:text-white relative overflow-x-hidden font-sans"
       style={{
         backgroundImage: `radial-gradient(#151D2F 1px, transparent 1px)`,
         backgroundSize: '24px 24px',
@@ -303,23 +301,23 @@ function AfriVisaApp() {
               <div className="max-w-7xl mx-auto flex items-center justify-between">
                 {/* Brand Logo with A Shield */}
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/25">
-                    <Shield className="w-5 h-5 text-white" />
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-slate-700 to-slate-900 border border-slate-600 flex items-center justify-center text-white shadow-md">
+                    <Shield className="w-4 h-4 text-white" />
                   </div>
                   <div className="flex items-baseline gap-1">
                     <span className="text-xl font-extrabold tracking-tight text-white">AfriVisa</span>
-                    <span className="text-[10px] font-mono text-cyan-400 font-semibold uppercase tracking-wider">Global</span>
+                    <span className="text-[10px] font-mono text-slate-400 font-semibold uppercase tracking-wider">Global</span>
                   </div>
                 </div>
 
                 {/* Right Actions: Sign In & Get Started */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 font-mono">
                   <button
                     onClick={() => {
                       setLegalTab('FEES');
                       setShowLegal(true);
                     }}
-                    className="hidden sm:inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-mono text-slate-400 hover:text-white transition-colors"
+                    className="hidden sm:inline-flex items-center px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white transition-colors"
                   >
                     Rate: 1 USD = {fxInfo.fx_rate} GHS
                   </button>
@@ -333,7 +331,7 @@ function AfriVisaApp() {
 
                   <button
                     onClick={() => handleOpenAuth('REGISTER')}
-                    className="py-2 px-5 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 text-slate-950 font-extrabold text-xs transition-all shadow-lg shadow-cyan-500/20 flex items-center gap-1.5"
+                    className="py-2 px-5 rounded-xl bg-white hover:bg-slate-200 text-slate-950 font-bold text-xs transition-all shadow-md flex items-center gap-1.5"
                   >
                     <span>Get Started</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -344,25 +342,26 @@ function AfriVisaApp() {
 
             {/* Hero Section */}
             <div className="max-w-4xl mx-auto px-4 sm:px-8 py-14 sm:py-20 text-center">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/25 text-amber-300 font-mono text-xs mb-6">
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                <span>Zero Monthly Maintenance • 15 GHS Card Issuance</span>
+              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 font-mono text-xs mb-6 shadow-sm">
+                <span>Card Purchase Fee: GH₵ 15.00</span>
+                <span>•</span>
+                <span className="text-white font-bold">$1,000.00 USD Limit</span>
               </div>
 
               <h1 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight leading-tight mb-5">
                 Global Virtual Visa Cards funded directly via Mobile Money.
               </h1>
               <p className="text-sm sm:text-base text-slate-400 max-w-xl mx-auto leading-relaxed mb-8">
-                Instant 3D-Secure USD Visa cards for international subscriptions, software tools, and cloud platforms. Fund instantly with MTN MoMo, Telecel Cash, or AT Money.
+                Generate authentic 3D-Secure USD Visa cards for international purchases and online merchant checkout. Load funds instantly with MTN MoMo, Telecel Cash, or AT Money.
               </p>
 
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 mb-14">
                 <button
                   onClick={() => handleOpenAuth('REGISTER')}
-                  className="w-full sm:w-auto py-3.5 px-8 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 text-slate-950 font-extrabold text-sm transition-all shadow-xl shadow-cyan-500/25 flex items-center justify-center gap-2"
+                  className="w-full sm:w-auto py-3.5 px-8 rounded-xl bg-white hover:bg-slate-200 text-slate-950 font-extrabold text-sm transition-all shadow-lg flex items-center justify-center gap-2"
                 >
-                  <span>Get Started (Create Account)</span>
+                  <span>Get Started (Purchase Card)</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
                 <button
@@ -373,29 +372,37 @@ function AfriVisaApp() {
                 </button>
               </div>
 
-              {/* Brushed Titanium Card Mockup Preview */}
-              <div className="max-w-md mx-auto transform hover:scale-[1.02] transition-transform duration-300">
+              {/* Authentic Physical Visa Card Preview (NO GLOW, REAL GOLD CHIP) */}
+              <div className="max-w-md mx-auto transform hover:scale-[1.01] transition-transform duration-300">
                 <VirtualCard3D
-                  card={activeCard}
-                  details={cardDetails}
-                  revealed={revealed}
-                  onToggleReveal={handleToggleReveal}
+                  card={{
+                    id: 'preview',
+                    masked_number: '4512 7800 1234 5678',
+                    cardholder_name: 'OLUWASEUN ADESINA',
+                    expiry_month: 9,
+                    expiry_year: 27,
+                    balance: 0.0,
+                    status: 'ACTIVE',
+                  }}
+                  details={null}
+                  revealed={false}
+                  onToggleReveal={() => {}}
                 />
               </div>
             </div>
           </div>
         ) : (
           /* ========================================================================= */
-          /* AUTHENTICATED APP SHELL: AFRIVISA DASHBOARD (MATCHING IMAGE EXACTLY)       */
+          /* AUTHENTICATED APP SHELL: AFRIVISA DASHBOARD (WITH FULL NAVIGATION LOGIC)  */
           /* ========================================================================= */
           <div className="flex flex-col lg:flex-row min-h-screen">
-            {/* 1. LEFT SIDEBAR */}
+            {/* 1. LEFT SIDEBAR NAVIGATION */}
             <aside className="w-full lg:w-64 bg-[#090D16]/95 border-b lg:border-b-0 lg:border-r border-[#192236] p-5 flex flex-col justify-between shrink-0">
               <div className="space-y-6">
                 {/* Brand Logo with A Shield */}
                 <div className="flex items-center gap-2.5 px-2">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-md shadow-cyan-500/30">
-                    <Shield className="w-4 h-4" />
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-slate-700 to-slate-900 border border-slate-600 flex items-center justify-center text-white shadow-md">
+                    <Shield className="w-4 h-4 text-white" />
                   </div>
                   <span className="text-lg font-bold text-white tracking-tight">AfriVisa</span>
                 </div>
@@ -409,76 +416,89 @@ function AfriVisaApp() {
                     <div className="truncate">
                       <p className="text-[10px] text-slate-400 font-mono">Profile</p>
                       <p className="text-xs font-bold text-white truncate">
-                        {currentUser?.full_name || 'Oluwaseun A.'}
+                        {currentUser?.full_name || 'Valued Client'}
                       </p>
                     </div>
                   </div>
                   <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
                 </div>
 
-                {/* Sidebar Navigation */}
+                {/* Sidebar Navigation Buttons */}
                 <nav className="space-y-1.5 font-mono text-xs">
+                  {/* Dashboard */}
                   <button
                     onClick={() => setActiveNav('DASHBOARD')}
                     className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all ${
                       activeNav === 'DASHBOARD'
-                        ? 'bg-[#151D2F] text-white font-bold border-l-2 border-cyan-400'
+                        ? 'bg-[#151D2F] text-white font-bold border-l-2 border-slate-300'
                         : 'text-slate-400 hover:text-white hover:bg-[#0E131F]'
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <LayoutDashboard className="w-4 h-4 text-cyan-400" />
+                      <LayoutDashboard className="w-4 h-4 text-slate-300" />
                       <span>Dashboard</span>
                     </div>
-                    {activeNav === 'DASHBOARD' && (
-                      <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#22D3EE]" />
-                    )}
                   </button>
 
+                  {/* Virtual Cards */}
                   <button
-                    onClick={handleOpenIssueCard}
-                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-[#0E131F] transition-colors"
+                    onClick={() => setActiveNav('VIRTUAL_CARDS')}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all ${
+                      activeNav === 'VIRTUAL_CARDS'
+                        ? 'bg-[#151D2F] text-white font-bold border-l-2 border-slate-300'
+                        : 'text-slate-400 hover:text-white hover:bg-[#0E131F]'
+                    }`}
                   >
                     <div className="flex items-center gap-3">
-                      <CreditCard className="w-4 h-4" />
+                      <CreditCard className="w-4 h-4 text-slate-300" />
                       <span>Virtual Cards</span>
                     </div>
-                    <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
-                      15 GHS
+                    <span className="text-[10px] text-slate-300 font-bold bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">
+                      {cards.length}
                     </span>
                   </button>
 
+                  {/* Transactions */}
                   <button
                     onClick={() => setActiveNav('TRANSACTIONS')}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors ${
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all ${
                       activeNav === 'TRANSACTIONS'
-                        ? 'bg-[#151D2F] text-white font-bold border-l-2 border-cyan-400'
+                        ? 'bg-[#151D2F] text-white font-bold border-l-2 border-slate-300'
                         : 'text-slate-400 hover:text-white hover:bg-[#0E131F]'
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <ArrowLeftRight className="w-4 h-4" />
+                      <ArrowLeftRight className="w-4 h-4 text-slate-300" />
                       <span>Transactions</span>
                     </div>
                   </button>
 
+                  {/* Recipient / Sweep */}
                   <button
-                    onClick={() => handleOpenMoMo('MTN')}
-                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-[#0E131F] transition-colors"
+                    onClick={() => setActiveNav('RECIPIENT')}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all ${
+                      activeNav === 'RECIPIENT'
+                        ? 'bg-[#151D2F] text-white font-bold border-l-2 border-slate-300'
+                        : 'text-slate-400 hover:text-white hover:bg-[#0E131F]'
+                    }`}
                   >
                     <div className="flex items-center gap-3">
-                      <Users className="w-4 h-4" />
+                      <Users className="w-4 h-4 text-slate-300" />
                       <span>Recipient</span>
                     </div>
-                    <div className="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_8px_#A855F7]" />
                   </button>
 
+                  {/* Settings */}
                   <button
-                    onClick={() => setShowControls(true)}
-                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-[#0E131F] transition-colors"
+                    onClick={() => setActiveNav('SETTINGS')}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all ${
+                      activeNav === 'SETTINGS'
+                        ? 'bg-[#151D2F] text-white font-bold border-l-2 border-slate-300'
+                        : 'text-slate-400 hover:text-white hover:bg-[#0E131F]'
+                    }`}
                   >
                     <div className="flex items-center gap-3">
-                      <Settings className="w-4 h-4" />
+                      <Settings className="w-4 h-4 text-slate-300" />
                       <span>Settings</span>
                     </div>
                   </button>
@@ -488,11 +508,11 @@ function AfriVisaApp() {
               {/* Bottom Profile / Sign Out */}
               <div className="pt-4 border-t border-[#192236] flex items-center justify-between">
                 <div className="flex items-center gap-2 overflow-hidden">
-                  <div className="w-7 h-7 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 flex items-center justify-center text-xs font-bold shrink-0">
+                  <div className="w-7 h-7 rounded-full bg-slate-800 text-slate-200 border border-slate-700 flex items-center justify-center text-xs font-bold shrink-0">
                     {currentUser?.full_name ? currentUser.full_name[0] : 'U'}
                   </div>
                   <span className="text-xs text-slate-300 truncate font-mono">
-                    {currentUser?.full_name || 'Oluwaseun A.'}
+                    {currentUser?.full_name || 'Valued Client'}
                   </span>
                 </div>
                 <button
@@ -521,31 +541,40 @@ function AfriVisaApp() {
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search transactions or cards"
-                      className="w-full bg-[#0E131F] border border-[#192236] rounded-xl py-1.5 pl-8 pr-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono"
+                      placeholder="Search transactions"
+                      className="w-full bg-[#0E131F] border border-[#192236] rounded-xl py-1.5 pl-8 pr-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-slate-400 font-mono"
                     />
                   </div>
 
                   {/* Icon Actions */}
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => handleOpenIssueCard()}
+                      onClick={handleOpenPurchaseCard}
                       className="p-2 rounded-xl bg-[#0E131F] border border-[#192236] text-slate-300 hover:text-white hover:bg-[#151D2F] transition-colors"
-                      title="Request New Card (15 GHS)"
+                      title="Purchase Virtual Card (GH₵ 15.00)"
                     >
-                      <Plus className="w-4 h-4 text-amber-400" />
+                      <Plus className="w-4 h-4 text-white" />
                     </button>
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowNotifications((prev) => !prev)}
+                        className="p-2 rounded-xl bg-[#0E131F] border border-[#192236] text-slate-300 hover:text-white hover:bg-[#151D2F] transition-colors"
+                        title="Notifications"
+                      >
+                        <Bell className="w-4 h-4" />
+                      </button>
+
+                      {showNotifications && (
+                        <div className="absolute right-0 mt-2 w-64 p-3 bg-[#0E131F] border border-[#1E293F] rounded-xl shadow-2xl z-50 text-xs font-mono space-y-2">
+                          <p className="font-bold text-white border-b border-[#1E293F] pb-1.5">Notifications</p>
+                          <p className="text-slate-400 text-[11px]">No unread system alerts. All systems operational.</p>
+                        </div>
+                      )}
+                    </div>
                     <button
-                      className="p-2 rounded-xl bg-[#0E131F] border border-[#192236] text-slate-300 hover:text-white hover:bg-[#151D2F] transition-colors relative"
-                      title="Notifications"
-                    >
-                      <Bell className="w-4 h-4" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 absolute top-1.5 right-1.5 shadow-[0_0_6px_#F59E0B]" />
-                    </button>
-                    <button
-                      onClick={() => setShowControls(true)}
+                      onClick={() => setActiveNav('SETTINGS')}
                       className="p-2 rounded-xl bg-[#0E131F] border border-[#192236] text-slate-300 hover:text-white hover:bg-[#151D2F] transition-colors"
-                      title="Card Controls & Security"
+                      title="Settings"
                     >
                       <Settings className="w-4 h-4" />
                     </button>
@@ -555,203 +584,412 @@ function AfriVisaApp() {
 
               {/* KYC Compliance Notification Banner */}
               {currentUser?.kyc_status !== 'VERIFIED' && (
-                <div className="p-3.5 rounded-xl bg-[#1C1809] border border-[#3F320B] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-2.5 text-amber-300">
+                <div className="p-3.5 rounded-xl bg-[#141822] border border-[#242E44] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2.5 text-slate-300">
                     <ShieldAlert className="w-4 h-4 shrink-0 text-amber-400" />
                     <div>
                       <span className="font-semibold block text-white font-mono">
-                        Tier-1 Identity Verification Required
+                        Ghana Card Verification Recommended
                       </span>
                       <span className="text-slate-400 text-[11px]">
-                        Please register your Ghana Card to comply with Bank of Ghana cross-border payment limits.
+                        Register your Ghana Card for Bank of Ghana compliance and unconstrained card load limits.
                       </span>
                     </div>
                   </div>
                   <button
                     onClick={() => setShowKyc(true)}
-                    className="py-1 px-3.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs shrink-0 transition-colors font-mono"
+                    className="py-1 px-3.5 rounded-lg bg-white hover:bg-slate-200 text-slate-950 font-bold text-xs shrink-0 transition-colors font-mono"
                   >
                     Verify Ghana Card
                   </button>
                 </div>
               )}
 
-              {/* MIDDLE ROW: CARD & RIGHT WIDGETS (Matching Image) */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                {/* Center / Left: The Radial Brushed Titanium Visa Card */}
-                <div className="lg:col-span-7 flex flex-col items-center justify-center">
-                  <VirtualCard3D
-                    card={activeCard}
-                    details={cardDetails}
-                    revealed={revealed}
-                    onToggleReveal={handleToggleReveal}
-                  />
+              {/* =================================================================== */}
+              {/* VIEW 1: DASHBOARD                                                   */}
+              {/* =================================================================== */}
+              {activeNav === 'DASHBOARD' && (
+                <div className="space-y-6">
+                  {/* MIDDLE ROW: CARD & RIGHT WIDGETS */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    {/* Left: The Virtual Visa Card OR Purchase Card Placeholder */}
+                    <div className="lg:col-span-7 flex flex-col items-center justify-center">
+                      {activeCard ? (
+                        <>
+                          <VirtualCard3D
+                            card={activeCard}
+                            details={cardDetails}
+                            revealed={revealed}
+                            onToggleReveal={handleToggleReveal}
+                          />
 
-                  {/* Card Quick Actions Bar */}
-                  <div className="flex items-center gap-2.5 mt-5 w-full max-w-[450px] text-xs font-mono">
-                    <button
-                      onClick={handleToggleFreeze}
-                      className="flex-1 py-2 px-3 rounded-xl bg-[#0E131F] hover:bg-[#151D2E] border border-[#1E293F] text-slate-300 font-semibold transition-colors text-center"
-                    >
-                      {activeCard?.status === 'FROZEN' ? 'Unlock Card' : 'Freeze Card'}
-                    </button>
-                    <button
-                      onClick={() => setShowControls(true)}
-                      className="flex-1 py-2 px-3 rounded-xl bg-[#0E131F] hover:bg-[#151D2E] border border-[#1E293F] text-slate-300 font-semibold transition-colors text-center"
-                    >
-                      Card Limits
-                    </button>
-                    <button
-                      onClick={() => setShowCashout(true)}
-                      className="flex-1 py-2 px-3 rounded-xl bg-[#0E131F] hover:bg-[#151D2E] border border-[#1E293F] text-slate-300 font-semibold transition-colors text-center"
-                    >
-                      Sweep to MoMo
-                    </button>
-                  </div>
-                </div>
+                          {/* Card Quick Actions Bar */}
+                          <div className="flex items-center gap-2.5 mt-5 w-full max-w-[440px] text-xs font-mono">
+                            <button
+                              onClick={handleToggleFreeze}
+                              className="flex-1 py-2 px-3 rounded-xl bg-[#0E131F] hover:bg-[#151D2E] border border-[#1E293F] text-slate-300 font-semibold transition-colors text-center"
+                            >
+                              {activeCard?.status === 'FROZEN' ? 'Unlock Card' : 'Freeze Card'}
+                            </button>
+                            <button
+                              onClick={() => setShowControls(true)}
+                              className="flex-1 py-2 px-3 rounded-xl bg-[#0E131F] hover:bg-[#151D2E] border border-[#1E293F] text-slate-300 font-semibold transition-colors text-center"
+                            >
+                              Card Limits
+                            </button>
+                            <button
+                              onClick={() => setShowCashout(true)}
+                              className="flex-1 py-2 px-3 rounded-xl bg-[#0E131F] hover:bg-[#151D2E] border border-[#1E293F] text-slate-300 font-semibold transition-colors text-center"
+                            >
+                              Sweep to MoMo
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        /* USER MUST PURCHASE A VIRTUAL CARD BEFORE HE/SHE GETS ONE */
+                        <div className="w-full max-w-[440px] h-[260px] sm:h-[268px] rounded-2xl border-2 border-dashed border-[#242E44] bg-[#0A0E18] p-6 flex flex-col justify-between text-center">
+                          <div className="space-y-2 pt-2">
+                            <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center mx-auto text-white">
+                              <CreditCard className="w-5 h-5" />
+                            </div>
+                            <h4 className="text-base font-bold text-white">No Active Virtual Card</h4>
+                            <p className="text-xs text-slate-400 font-mono max-w-xs mx-auto">
+                              Purchase your 3D-Secure AfriVisa card with a fixed $1,000.00 USD spending limit.
+                            </p>
+                          </div>
 
-                {/* Right Column: Card Balance + Quick Top-Up (Matching Image) */}
-                <div className="lg:col-span-5 space-y-4">
-                  {/* Card Balance Card */}
-                  <div className="p-5 rounded-2xl bg-[#0E131F] border border-[#192236] shadow-xl">
-                    <div className="flex items-center justify-between text-slate-400 text-xs font-mono mb-2">
-                      <span>Card Balance</span>
-                      <MoreHorizontal className="w-4 h-4 cursor-pointer hover:text-white" />
+                          <div className="space-y-2">
+                            <button
+                              onClick={handleOpenPurchaseCard}
+                              className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-slate-200 text-slate-950 font-bold text-xs font-mono transition-colors shadow-md flex items-center justify-center gap-2"
+                            >
+                              <span>Purchase Card (GH₵ 15.00 via MoMo)</span>
+                              <ArrowRight className="w-4 h-4" />
+                            </button>
+                            <span className="text-[10px] text-slate-500 font-mono block">
+                              Supports MTN MoMo, Telecel Cash, and AT Money
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    <div className="my-2">
-                      <span className="text-3xl sm:text-4xl font-black text-amber-400 font-mono tracking-tight drop-shadow-[0_0_15px_rgba(245,158,11,0.4)]">
-                        ${Number(activeCard?.balance ?? stats?.total_balance_usd ?? 0.0).toFixed(2)}
+                    {/* Right Column: Card Balance + Quick Top-Up */}
+                    <div className="lg:col-span-5 space-y-4">
+                      {/* Card Balance Card */}
+                      <div className="p-5 rounded-2xl bg-[#0E131F] border border-[#192236] shadow-xl">
+                        <div className="flex items-center justify-between text-slate-400 text-xs font-mono mb-2">
+                          <span>Card Balance</span>
+                          <MoreHorizontal className="w-4 h-4 cursor-pointer hover:text-white" />
+                        </div>
+
+                        <div className="my-2">
+                          <span className="text-3xl sm:text-4xl font-black text-white font-mono tracking-tight">
+                            ${Number(activeCard?.balance ?? 0.0).toFixed(2)}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs font-mono text-slate-400 pt-1">
+                          <span>Current Balance</span>
+                          <span className="font-bold text-slate-200">USD</span>
+                        </div>
+                      </div>
+
+                      {/* Quick Top-Up Card (MTN MoMo, Telecel Cash, and AT Money) */}
+                      <div className="p-5 rounded-2xl bg-[#0E131F] border border-[#192236] shadow-xl space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-200 tracking-wide">Quick Top-Up</span>
+                          <span className="text-[10px] font-mono text-slate-400">1 USD = {fxInfo.fx_rate} GHS</span>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2.5">
+                          {/* MTN MoMo Button */}
+                          <div className="p-2.5 rounded-xl bg-[#131929] border border-[#1F293F] flex flex-col justify-between">
+                            <div className="flex items-center gap-1.5 mb-2.5">
+                              <div className="w-6 h-6 rounded-md bg-yellow-400 text-slate-950 font-bold flex items-center justify-center text-[9px] shadow-sm shrink-0">
+                                MTN
+                              </div>
+                              <div className="overflow-hidden">
+                                <p className="text-[11px] font-bold text-white leading-tight truncate">MTN</p>
+                                <p className="text-[9px] text-slate-400 truncate">MoMo</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleOpenMoMo('MTN')}
+                              className="w-full py-1.5 rounded-lg bg-[#1D263B] hover:bg-yellow-400 hover:text-slate-950 text-slate-200 text-[10px] font-semibold font-mono transition-colors text-center"
+                            >
+                              Top Up
+                            </button>
+                          </div>
+
+                          {/* Telecel Cash Button */}
+                          <div className="p-2.5 rounded-xl bg-[#131929] border border-[#1F293F] flex flex-col justify-between">
+                            <div className="flex items-center gap-1.5 mb-2.5">
+                              <div className="w-6 h-6 rounded-md bg-red-600 text-white font-bold flex items-center justify-center text-[10px] shadow-sm shrink-0">
+                                t
+                              </div>
+                              <div className="overflow-hidden">
+                                <p className="text-[11px] font-bold text-white leading-tight truncate">Telecel</p>
+                                <p className="text-[9px] text-slate-400 truncate">Cash</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleOpenMoMo('TELECEL')}
+                              className="w-full py-1.5 rounded-lg bg-[#1D263B] hover:bg-red-600 hover:text-white text-slate-200 text-[10px] font-semibold font-mono transition-colors text-center"
+                            >
+                              Top Up
+                            </button>
+                          </div>
+
+                          {/* AT Money Button */}
+                          <div className="p-2.5 rounded-xl bg-[#131929] border border-[#1F293F] flex flex-col justify-between">
+                            <div className="flex items-center gap-1.5 mb-2.5">
+                              <div className="w-6 h-6 rounded-md bg-gradient-to-tr from-blue-600 to-red-600 text-white font-bold flex items-center justify-center text-[9px] shadow-sm shrink-0">
+                                AT
+                              </div>
+                              <div className="overflow-hidden">
+                                <p className="text-[11px] font-bold text-white leading-tight truncate">AT</p>
+                                <p className="text-[9px] text-slate-400 truncate">Money</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleOpenMoMo('AT')}
+                              className="w-full py-1.5 rounded-lg bg-[#1D263B] hover:bg-blue-600 hover:text-white text-slate-200 text-[10px] font-semibold font-mono transition-colors text-center"
+                            >
+                              Top Up
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* BOTTOM: RECENT TRANSACTIONS (NO DUMMY / MOCK DATA) */}
+                  <div className="p-5 rounded-2xl bg-[#0E131F] border border-[#192236] shadow-xl space-y-4">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-200 tracking-wide uppercase font-mono">
+                        RECENT TRANSACTIONS
+                      </span>
+                      <span className="text-slate-500 font-mono text-[11px]">Paystack & Visa Network Rails</span>
+                    </div>
+
+                    {/* Real Live Transactions List or Clean Empty State */}
+                    {transactions && transactions.length > 0 ? (
+                      <div className="space-y-2 font-mono text-xs">
+                        {transactions.slice(0, 8).map((tx) => (
+                          <div
+                            key={tx.id}
+                            className="p-3 rounded-xl bg-[#111624] border border-[#1A2234] flex items-center justify-between hover:bg-[#151B2C] transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 font-bold text-xs">
+                                <CreditCard className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <p className="font-bold text-white">{tx.merchant_name || 'Card Transaction'}</p>
+                                <p className="text-[11px] text-slate-400">
+                                  ${Number(tx.amount || 0).toFixed(2)} USD • {new Date(tx.created_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+                            <span
+                              className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold ${
+                                tx.status === 'SUCCESS'
+                                  ? 'text-emerald-400 border border-emerald-500/40 bg-emerald-500/10'
+                                  : 'text-amber-400 border border-amber-500/40 bg-amber-500/10'
+                              }`}
+                            >
+                              {tx.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="py-10 text-center space-y-2 border border-dashed border-[#1C2438] rounded-xl">
+                        <div className="w-10 h-10 rounded-full bg-slate-800/60 border border-slate-700/60 flex items-center justify-center mx-auto text-slate-400">
+                          <CreditCard className="w-5 h-5 text-slate-400" />
+                        </div>
+                        <p className="text-xs font-semibold text-slate-300 font-mono">No Recent Transactions</p>
+                        <p className="text-[11px] text-slate-500 font-mono max-w-sm mx-auto">
+                          Transactions executed with your AfriVisa card or wallet loads will appear here in real time.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* =================================================================== */}
+              {/* VIEW 2: VIRTUAL CARDS MANAGEMENT                                    */}
+              {/* =================================================================== */}
+              {activeNav === 'VIRTUAL_CARDS' && (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold text-white">Your Virtual Cards</h3>
+                      <p className="text-xs text-slate-400 font-mono">
+                        Manage your active Visa cards, card credentials, and spending limits.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleOpenPurchaseCard}
+                      className="py-2 px-4 rounded-xl bg-white hover:bg-slate-200 text-slate-950 font-bold text-xs font-mono transition-colors shadow-md flex items-center gap-1.5"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Purchase New Card (GH₵ 15.00)</span>
+                    </button>
+                  </div>
+
+                  {cards && cards.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {cards.map((c) => (
+                        <div key={c.id} className="p-5 rounded-2xl bg-[#0E131F] border border-[#192236] shadow-xl space-y-4">
+                          <VirtualCard3D
+                            card={c}
+                            details={cardDetails}
+                            revealed={revealed && activeCardId === c.id}
+                            onToggleReveal={() => {
+                              setActiveCardId(c.id);
+                              handleToggleReveal();
+                            }}
+                          />
+                          <div className="flex items-center justify-between text-xs font-mono pt-2 border-t border-[#1C2538]">
+                            <div>
+                              <span className="text-slate-400 block text-[10px]">Spending Limit</span>
+                              <span className="text-white font-bold">$1,000.00 USD</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  setActiveCardId(c.id);
+                                  handleToggleFreeze();
+                                }}
+                                className="py-1 px-3 rounded-lg bg-[#141A26] border border-[#20293D] text-slate-300 hover:text-white"
+                              >
+                                {c.status === 'FROZEN' ? 'Unlock' : 'Freeze'}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setActiveCardId(c.id);
+                                  setShowTopup(true);
+                                }}
+                                className="py-1 px-3 rounded-lg bg-white text-slate-950 font-bold"
+                              >
+                                Top Up
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="py-16 text-center border-2 border-dashed border-[#1C2538] rounded-2xl p-8 space-y-4">
+                      <div className="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center mx-auto text-white">
+                        <CreditCard className="w-6 h-6" />
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="text-base font-bold text-white">No Virtual Cards Issued Yet</h4>
+                        <p className="text-xs text-slate-400 font-mono max-w-sm mx-auto">
+                          Get your authentic 3D-Secure Visa card with a $1,000 USD limit funded instantly with Mobile Money.
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleOpenPurchaseCard}
+                        className="py-2.5 px-5 rounded-xl bg-white hover:bg-slate-200 text-slate-950 font-bold text-xs font-mono transition-colors shadow-md"
+                      >
+                        Purchase Card for GH₵ 15.00
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* =================================================================== */}
+              {/* VIEW 3: FULL TRANSACTIONS LEDGER                                    */}
+              {/* =================================================================== */}
+              {activeNav === 'TRANSACTIONS' && (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Transaction Activity & Ledger</h3>
+                    <p className="text-xs text-slate-400 font-mono">
+                      Real-time ledger of card charges, mobile money inflows, and settlement records.
+                    </p>
+                  </div>
+                  <TransactionLedger transactions={transactions} />
+                </div>
+              )}
+
+              {/* =================================================================== */}
+              {/* VIEW 4: RECIPIENT & SWEEP (CASH OUT TO MOMO)                        */}
+              {/* =================================================================== */}
+              {activeNav === 'RECIPIENT' && (
+                <div className="space-y-6 max-w-2xl">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Sweep Card Balance to Mobile Money</h3>
+                    <p className="text-xs text-slate-400 font-mono">
+                      Withdraw USD funds from your virtual card back to your Ghana Mobile Money wallet.
+                    </p>
+                  </div>
+
+                  <div className="p-6 rounded-2xl bg-[#0E131F] border border-[#192236] shadow-xl space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-[#1C2538] text-xs font-mono">
+                      <span className="text-slate-400">Available Card Balance:</span>
+                      <span className="text-white font-bold text-base">
+                        ${Number(activeCard?.balance ?? 0.0).toFixed(2)} USD
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-between text-xs font-mono text-slate-400 pt-1">
-                      <span>Current Balance</span>
-                      <span className="font-bold text-slate-200">USD</span>
-                    </div>
-                  </div>
-
-                  {/* Quick Top-Up Card (MTN MoMo, Telecel Cash, and AT Money) */}
-                  <div className="p-5 rounded-2xl bg-[#0E131F] border border-[#192236] shadow-xl space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-200 tracking-wide">Quick Top-Up</span>
-                      <span className="text-[10px] font-mono text-slate-400">1 USD = {fxInfo.fx_rate} GHS</span>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2.5">
-                      {/* MTN MoMo Button */}
-                      <div className="p-2.5 rounded-xl bg-[#131929] border border-[#1F293F] flex flex-col justify-between">
-                        <div className="flex items-center gap-1.5 mb-2.5">
-                          <div className="w-6 h-6 rounded-md bg-yellow-400 text-slate-950 font-bold flex items-center justify-center text-[9px] shadow-sm shrink-0">
-                            MTN
-                          </div>
-                          <div className="overflow-hidden">
-                            <p className="text-[11px] font-bold text-white leading-tight truncate">MTN</p>
-                            <p className="text-[9px] text-slate-400 truncate">MoMo</p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleOpenMoMo('MTN')}
-                          className="w-full py-1.5 rounded-lg bg-[#1D263B] hover:bg-yellow-400 hover:text-slate-950 text-slate-200 text-[10px] font-semibold font-mono transition-colors text-center"
-                        >
-                          Top Up
-                        </button>
-                      </div>
-
-                      {/* Telecel Cash Button */}
-                      <div className="p-2.5 rounded-xl bg-[#131929] border border-[#1F293F] flex flex-col justify-between">
-                        <div className="flex items-center gap-1.5 mb-2.5">
-                          <div className="w-6 h-6 rounded-md bg-red-600 text-white font-bold flex items-center justify-center text-[10px] shadow-sm shrink-0">
-                            t
-                          </div>
-                          <div className="overflow-hidden">
-                            <p className="text-[11px] font-bold text-white leading-tight truncate">Telecel</p>
-                            <p className="text-[9px] text-slate-400 truncate">Cash</p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleOpenMoMo('TELECEL')}
-                          className="w-full py-1.5 rounded-lg bg-[#1D263B] hover:bg-red-600 hover:text-white text-slate-200 text-[10px] font-semibold font-mono transition-colors text-center"
-                        >
-                          Top Up
-                        </button>
-                      </div>
-
-                      {/* AT Money Button */}
-                      <div className="p-2.5 rounded-xl bg-[#131929] border border-[#1F293F] flex flex-col justify-between">
-                        <div className="flex items-center gap-1.5 mb-2.5">
-                          <div className="w-6 h-6 rounded-md bg-gradient-to-tr from-blue-600 to-red-600 text-white font-bold flex items-center justify-center text-[9px] shadow-sm shrink-0">
-                            AT
-                          </div>
-                          <div className="overflow-hidden">
-                            <p className="text-[11px] font-bold text-white leading-tight truncate">AT</p>
-                            <p className="text-[9px] text-slate-400 truncate">Money</p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleOpenMoMo('AT')}
-                          className="w-full py-1.5 rounded-lg bg-[#1D263B] hover:bg-blue-600 hover:text-white text-slate-200 text-[10px] font-semibold font-mono transition-colors text-center"
-                        >
-                          Top Up
-                        </button>
-                      </div>
-                    </div>
+                    <button
+                      onClick={() => setShowCashout(true)}
+                      disabled={!activeCard || Number(activeCard?.balance ?? 0) <= 0}
+                      className="w-full py-3 px-4 rounded-xl bg-white hover:bg-slate-200 disabled:opacity-40 text-slate-950 font-bold text-xs font-mono transition-colors shadow-md flex items-center justify-center gap-2"
+                    >
+                      <Send className="w-4 h-4" />
+                      <span>Initiate Sweep to MoMo</span>
+                    </button>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* BOTTOM: PRODUCTION-READY RECENT TRANSACTIONS (NO DUMMY / MOCK DATA) */}
-              <div className="p-5 rounded-2xl bg-[#0E131F] border border-[#192236] shadow-xl space-y-4">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-slate-200 tracking-wide uppercase font-mono">
-                    RECENT TRANSACTIONS
-                  </span>
-                  <span className="text-slate-500 font-mono text-[11px]">Paystack & Visa Network Rails</span>
-                </div>
-
-                {/* Real Live Transactions List or Clean Empty State */}
-                {transactions && transactions.length > 0 ? (
-                  <div className="space-y-2 font-mono text-xs">
-                    {transactions.slice(0, 8).map((tx) => (
-                      <div
-                        key={tx.id}
-                        className="p-3 rounded-xl bg-[#111624] border border-[#1A2234] flex items-center justify-between hover:bg-[#151B2C] transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-bold text-xs">
-                            <CreditCard className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <p className="font-bold text-white">{tx.merchant_name || 'Card Transaction'}</p>
-                            <p className="text-[11px] text-slate-400">
-                              ${Number(tx.amount || 0).toFixed(2)} USD • {new Date(tx.created_at).toLocaleDateString()}
-                            </p>
-                          </div>
-                        </div>
-                        <span
-                          className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold ${
-                            tx.status === 'SUCCESS'
-                              ? 'text-emerald-400 border border-emerald-500/40 bg-emerald-500/10'
-                              : 'text-amber-400 border border-amber-500/40 bg-amber-500/10'
-                          }`}
-                        >
-                          {tx.status}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="py-10 text-center space-y-2 border border-dashed border-[#1C2438] rounded-xl">
-                    <div className="w-10 h-10 rounded-full bg-slate-800/60 border border-slate-700/60 flex items-center justify-center mx-auto text-slate-400">
-                      <CreditCard className="w-5 h-5 text-slate-400" />
-                    </div>
-                    <p className="text-xs font-semibold text-slate-300 font-mono">No Recent Transactions</p>
-                    <p className="text-[11px] text-slate-500 font-mono max-w-sm mx-auto">
-                      Transactions made with your AfriVisa virtual card or mobile money wallet loads will appear here in real time.
+              {/* =================================================================== */}
+              {/* VIEW 5: SETTINGS & ACCOUNT SECURITY                                 */}
+              {/* =================================================================== */}
+              {activeNav === 'SETTINGS' && (
+                <div className="space-y-6 max-w-2xl">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Account & Card Controls</h3>
+                    <p className="text-xs text-slate-400 font-mono">
+                      Configure your security parameters, daily limits, and identity credentials.
                     </p>
                   </div>
-                )}
-              </div>
+
+                  <div className="p-6 rounded-2xl bg-[#0E131F] border border-[#192236] shadow-xl space-y-4 text-xs font-mono">
+                    <div className="flex justify-between items-center py-2 border-b border-[#1C2538]">
+                      <span className="text-slate-400">Account Holder:</span>
+                      <span className="text-white font-bold">{currentUser?.full_name || 'Valued Client'}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-[#1C2538]">
+                      <span className="text-slate-400">Registered Phone:</span>
+                      <span className="text-white">{currentUser?.phone_number || 'Ghana SIM'}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-[#1C2538]">
+                      <span className="text-slate-400">Card Spending Limit:</span>
+                      <span className="text-white font-bold">$1,000.00 USD</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-[#1C2538]">
+                      <span className="text-slate-400">Identity Verification (KYC):</span>
+                      <span className="text-emerald-400 font-bold">{currentUser?.kyc_status || 'VERIFIED'}</span>
+                    </div>
+
+                    <button
+                      onClick={() => setShowControls(true)}
+                      className="w-full mt-2 py-2.5 px-4 rounded-xl bg-[#141A26] border border-[#20293D] hover:bg-[#1A2234] text-white font-semibold transition-colors"
+                    >
+                      Open Advanced Card Security Controls
+                    </button>
+                  </div>
+                </div>
+              )}
             </main>
           </div>
         )}
@@ -789,7 +1027,7 @@ function AfriVisaApp() {
               }}
               className="hover:text-slate-300 transition-colors"
             >
-              Fees
+              Fees (GH₵ 15.00)
             </button>
           </div>
         </div>
@@ -834,6 +1072,7 @@ function AfriVisaApp() {
       <IssueCardModal
         isOpen={showIssue}
         defaultName={currentUser?.full_name || ''}
+        defaultPhone={currentUser?.phone_number || ''}
         onClose={() => setShowIssue(false)}
         onSuccess={() => fetchUserData()}
       />
