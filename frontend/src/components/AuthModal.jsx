@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { X, Smartphone, Lock, User, ArrowRight, AlertCircle, Loader2, CheckCircle2, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Smartphone, Lock, User, ArrowRight, AlertCircle, Loader2, CheckCircle2, RefreshCw, Shield } from 'lucide-react';
 import { safeFetch } from '../api';
 
-export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
-  const [isRegister, setIsRegister] = useState(false);
+export default function AuthModal({ isOpen, onClose, onAuthSuccess, initialMode = 'SIGN_IN' }) {
+  const [isRegister, setIsRegister] = useState(initialMode === 'REGISTER');
   const [step, setStep] = useState('FORM'); // 'FORM' or 'OTP'
   const [phoneNumber, setPhoneNumber] = useState('');
   const [fullName, setFullName] = useState('');
@@ -12,6 +12,13 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
+
+  useEffect(() => {
+    setIsRegister(initialMode === 'REGISTER');
+    setStep('FORM');
+    setError('');
+    setInfoMessage('');
+  }, [initialMode, isOpen]);
 
   if (!isOpen) return null;
 
@@ -22,7 +29,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
 
     const cleanPhone = phoneNumber.trim().replace(/\s+/g, '').replace(/-/g, '');
     if (!cleanPhone || cleanPhone.length < 9) {
-      setError('Please enter a valid Ghana phone number (e.g. 0244123456)');
+      setError('Please enter a valid Ghana mobile number (e.g. 0244123456)');
       return;
     }
 
@@ -39,7 +46,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
     setLoading(true);
 
     if (isRegister) {
-      // Step 1: Register account
+      // Step 1: Register account -> backend creates user and automatically triggers Arkesel SMS OTP
       const res = await safeFetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -56,14 +63,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
         return;
       }
 
-      // Step 2: Trigger Arkesel SMS OTP
-      await safeFetch('/api/auth/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone_number: cleanPhone }),
-      });
-
-      setInfoMessage(`SMS verification code dispatched via Arkesel to ${cleanPhone}`);
+      setInfoMessage(`Security OTP code sent via SMS to ${cleanPhone}`);
       setStep('OTP');
       setLoading(false);
     } else {
@@ -78,7 +78,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
       });
 
       if (!res.ok) {
-        setError(res.error || 'Invalid phone number or password');
+        setError(res.error || 'Invalid mobile number or password');
         setLoading(false);
         return;
       }
@@ -97,7 +97,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
     setError('');
 
     if (!otpCode || otpCode.trim().length < 4) {
-      setError('Please enter the verification code sent to your phone');
+      setError('Please enter the 6-digit code received via SMS');
       return;
     }
 
@@ -114,24 +114,14 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
     });
 
     if (!res.ok) {
-      // Allow fallback if demo or test environment
-      if (otpCode.trim() !== '123456' && !res.data) {
-        setError(res.error || 'Invalid verification code. Please try again.');
-        setLoading(false);
-        return;
-      }
+      setError(res.error || 'Invalid verification code. Please try again.');
+      setLoading(false);
+      return;
     }
 
-    // Successfully verified! Fetch user profile & finalize session
-    const meRes = await safeFetch('/api/auth/me');
-    const user = meRes.ok && meRes.data ? meRes.data : {
-      id: Date.now(),
-      full_name: fullName.trim() || 'Valued Client',
-      phone_number: cleanPhone,
-      kyc_status: 'UNVERIFIED',
-    };
-
-    const token = localStorage.getItem('coratech_token') || 'coratech_session_' + Date.now();
+    // Success! Save JWT and session user
+    const token = res.data.access_token;
+    const user = res.data.user;
     localStorage.setItem('coratech_token', token);
     onAuthSuccess?.(user, token);
     onClose();
@@ -146,11 +136,14 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fade-in text-slate-100">
-      <div className="relative w-full max-w-md bg-[#161b22] border border-[#30363d] rounded-xl p-6 sm:p-7 shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in text-slate-100">
+      <div className="relative w-full max-w-md bg-[#0C101A] border border-[#1C2538] rounded-2xl p-6 sm:p-7 shadow-2xl overflow-hidden">
+        {/* Top Glow Accent */}
+        <div className="absolute top-0 right-0 w-48 h-48 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+
         <button
           onClick={resetModal}
-          className="absolute top-4 right-4 p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-[#21262d] transition-colors"
+          className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#151D2F] transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
@@ -158,21 +151,26 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
         {step === 'FORM' ? (
           <div>
             <div className="mb-5">
-              <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-emerald-400 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">
-                Coratech Security
-              </span>
-              <h2 className="text-xl font-bold text-white tracking-tight mt-2">
-                {isRegister ? 'Create Your Account' : 'Sign in to Coratech'}
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 flex items-center justify-center">
+                  <Shield className="w-4 h-4" />
+                </div>
+                <span className="text-xs font-mono font-bold uppercase tracking-wider text-cyan-400">
+                  AfriVisa Security
+                </span>
+              </div>
+              <h2 className="text-xl font-extrabold text-white tracking-tight">
+                {isRegister ? 'Create Your Account' : 'Sign In to AfriVisa'}
               </h2>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">
+              <p className="text-xs text-slate-400 font-mono mt-1">
                 {isRegister
-                  ? 'Get your virtual Visa card funded via Ghana Mobile Money'
-                  : 'Manage your virtual cards, balances, and transaction ledger'}
+                  ? 'Instantly issue virtual Visa cards funded with Mobile Money'
+                  : 'Manage your virtual cards, balances, and real-time ledger'}
               </p>
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 p-3 text-xs bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-md mb-4 font-mono">
+              <div className="flex items-center gap-2 p-3 text-xs bg-rose-500/10 border border-rose-500/25 text-rose-400 rounded-xl mb-4 font-mono">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{error}</span>
               </div>
@@ -181,8 +179,8 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
             <form onSubmit={handleInitialSubmit} className="space-y-3.5 text-xs font-mono">
               {isRegister && (
                 <div>
-                  <label className="block text-[11px] text-slate-400 uppercase font-semibold mb-1">
-                    Full Legal Name (Ghana Card Name)
+                  <label className="block text-[11px] text-slate-300 uppercase font-semibold mb-1">
+                    Full Legal Name (Matching Ghana Card)
                   </label>
                   <div className="relative">
                     <User className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -191,7 +189,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       placeholder="e.g. Kwame Mensah"
-                      className="w-full bg-[#0d1117] border border-[#30363d] rounded-md py-2 pl-9 pr-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-sans text-xs"
+                      className="w-full bg-[#121826] border border-[#1E293F] rounded-xl py-2 pl-9 pr-3 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-sans text-xs"
                       required
                     />
                   </div>
@@ -199,7 +197,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
               )}
 
               <div>
-                <label className="block text-[11px] text-slate-400 uppercase font-semibold mb-1">
+                <label className="block text-[11px] text-slate-300 uppercase font-semibold mb-1">
                   Ghana Mobile Number
                 </label>
                 <div className="relative">
@@ -209,17 +207,17 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
                     placeholder="024 412 3456"
-                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-md py-2 pl-9 pr-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 text-xs"
+                    className="w-full bg-[#121826] border border-[#1E293F] rounded-xl py-2 pl-9 pr-3 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 text-xs"
                     required
                   />
                 </div>
                 <span className="text-[10px] text-slate-500 block mt-1">
-                  MTN MoMo, Telecel Cash, or AT Money registered SIM
+                  Supports MTN MoMo, Telecel Cash, and AT Money
                 </span>
               </div>
 
               <div>
-                <label className="block text-[11px] text-slate-400 uppercase font-semibold mb-1">
+                <label className="block text-[11px] text-slate-300 uppercase font-semibold mb-1">
                   Account Password
                 </label>
                 <div className="relative">
@@ -229,7 +227,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••••••"
-                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-md py-2 pl-9 pr-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 text-xs"
+                    className="w-full bg-[#121826] border border-[#1E293F] rounded-xl py-2 pl-9 pr-3 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 text-xs"
                     required
                   />
                 </div>
@@ -238,47 +236,47 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 px-4 rounded-md bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 font-sans mt-2"
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 text-slate-950 font-extrabold text-xs transition-all shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-1.5 font-sans mt-2"
               >
                 {loading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Connecting...</span>
+                    <span>Processing...</span>
                   </>
                 ) : (
                   <>
-                    <span>{isRegister ? 'Continue to SMS Verification' : 'Sign In'}</span>
+                    <span>{isRegister ? 'Continue to SMS OTP Verification' : 'Sign In'}</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
               </button>
             </form>
 
-            <div className="mt-5 pt-4 border-t border-[#30363d] text-center text-xs font-mono text-slate-400">
+            <div className="mt-5 pt-4 border-t border-[#1C2538] text-center text-xs font-mono text-slate-400">
               {isRegister ? (
                 <p>
-                  Already have an account?{' '}
+                  Already registered?{' '}
                   <button
                     type="button"
                     onClick={() => {
                       setIsRegister(false);
                       setError('');
                     }}
-                    className="text-emerald-400 hover:underline font-semibold"
+                    className="text-cyan-400 hover:underline font-semibold"
                   >
                     Sign In
                   </button>
                 </p>
               ) : (
                 <p>
-                  New to Coratech?{' '}
+                  Don't have an account?{' '}
                   <button
                     type="button"
                     onClick={() => {
                       setIsRegister(true);
                       setError('');
                     }}
-                    className="text-emerald-400 hover:underline font-semibold"
+                    className="text-cyan-400 hover:underline font-semibold"
                   >
                     Create Account
                   </button>
@@ -289,7 +287,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
         ) : (
           /* STEP 2: ARKESEL SMS OTP VERIFICATION */
           <div className="py-2">
-            <div className="w-12 h-12 rounded-lg bg-[#21262d] border border-[#30363d] flex items-center justify-center mx-auto mb-3 text-emerald-400">
+            <div className="w-12 h-12 rounded-xl bg-[#121826] border border-[#1E293F] flex items-center justify-center mx-auto mb-3 text-cyan-400 shadow-md">
               <Smartphone className="w-6 h-6" />
             </div>
 
@@ -298,17 +296,17 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
               <p className="text-xs text-slate-400 font-mono mt-1">
                 We sent a 6-digit security code via Arkesel SMS to:
               </p>
-              <p className="text-xs font-bold text-emerald-400 font-mono mt-0.5">{phoneNumber}</p>
+              <p className="text-xs font-bold text-cyan-400 font-mono mt-0.5">{phoneNumber}</p>
             </div>
 
             {infoMessage && (
-              <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs rounded-md mb-3 font-mono text-center">
+              <div className="p-2.5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs rounded-xl mb-3 font-mono text-center">
                 {infoMessage}
               </div>
             )}
 
             {error && (
-              <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-md mb-3 font-mono text-center">
+              <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-xl mb-3 font-mono text-center">
                 {error}
               </div>
             )}
@@ -321,7 +319,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
                   value={otpCode}
                   onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
                   placeholder="123456"
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-md py-3 text-center text-xl font-mono tracking-[0.3em] text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-[#121826] border border-[#1E293F] rounded-xl py-3 text-center text-xl font-mono tracking-[0.3em] text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500"
                   autoFocus
                   required
                 />
@@ -330,7 +328,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 px-4 rounded-md bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 font-sans"
+                className="w-full py-2.5 px-4 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-extrabold text-xs transition-colors flex items-center justify-center gap-1.5 font-sans shadow-lg shadow-cyan-500/20"
               >
                 {loading ? (
                   <>
@@ -364,7 +362,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
                     });
                     setInfoMessage('New OTP code sent!');
                   }}
-                  className="text-emerald-400 hover:underline flex items-center gap-1"
+                  className="text-cyan-400 hover:underline flex items-center gap-1"
                 >
                   <RefreshCw className="w-3 h-3" />
                   <span>Resend SMS</span>
