@@ -320,6 +320,7 @@ def topup_with_momo(
         phone_number=payload.phone_number,
         network=payload.network,
         reference=order.reference,
+        callback_url="https://vcardbeta.vercel.app/",
     )
 
     # If simulated/test mode, auto-settle instantly

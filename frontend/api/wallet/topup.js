@@ -38,8 +38,10 @@ export default async function handler(req, res) {
       amount: Math.round(totalPromptGhs * 100), // In pesewas
       currency: 'GHS',
       reference: reference,
+      callback_url: 'https://vcardbeta.vercel.app/',
       channels: ['mobile_money'],
       metadata: {
+        platform: 'afrivisa',
         card_id,
         network,
         phone_number,
