@@ -117,11 +117,19 @@ function AfriVisaApp() {
   const [showLegal, setShowLegal] = useState(false);
   const [legalTab, setLegalTab] = useState('TERMS');
 
-  // Secret admin route trigger (?admin=true or #admin or Ctrl+Shift+A)
+  // Listen for admin trigger & Paystack redirect callback
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('admin') === 'true' || window.location.hash === '#admin') {
       setShowAdmin(true);
+    }
+
+    // Handle Paystack payment redirect callback
+    const ref = params.get('reference') || params.get('trxref');
+    if (ref) {
+      // Clear query params to clean URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+      fetchUserData();
     }
 
     const handleKeyDown = (e) => {
