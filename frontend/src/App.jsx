@@ -272,7 +272,7 @@ function AfriVisaApp() {
     cardholder_name: currentUser?.full_name?.toUpperCase() || 'OLUWASEUN ADESINA',
     expiry_month: 9,
     expiry_year: 27,
-    balance: 2450.00,
+    balance: 0.00,
     status: 'ACTIVE',
     color_theme: 'titanium',
   };
@@ -344,9 +344,9 @@ function AfriVisaApp() {
 
             {/* Hero Section */}
             <div className="max-w-4xl mx-auto px-4 sm:px-8 py-14 sm:py-20 text-center">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/25 text-cyan-300 font-mono text-xs mb-6">
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                <span>Zero Monthly Maintenance • 50 GHS Card Issuance</span>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/25 text-amber-300 font-mono text-xs mb-6">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                <span>Zero Monthly Maintenance • 15 GHS Card Issuance</span>
               </div>
 
               <h1 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight leading-tight mb-5">
@@ -443,8 +443,8 @@ function AfriVisaApp() {
                       <CreditCard className="w-4 h-4" />
                       <span>Virtual Cards</span>
                     </div>
-                    <span className="text-[10px] text-cyan-400 font-bold bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20">
-                      50 GHS
+                    <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                      15 GHS
                     </span>
                   </button>
 
@@ -531,16 +531,16 @@ function AfriVisaApp() {
                     <button
                       onClick={() => handleOpenIssueCard()}
                       className="p-2 rounded-xl bg-[#0E131F] border border-[#192236] text-slate-300 hover:text-white hover:bg-[#151D2F] transition-colors"
-                      title="Request New Card (50 GHS)"
+                      title="Request New Card (15 GHS)"
                     >
-                      <Plus className="w-4 h-4 text-cyan-400" />
+                      <Plus className="w-4 h-4 text-amber-400" />
                     </button>
                     <button
                       className="p-2 rounded-xl bg-[#0E131F] border border-[#192236] text-slate-300 hover:text-white hover:bg-[#151D2F] transition-colors relative"
                       title="Notifications"
                     >
                       <Bell className="w-4 h-4" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 absolute top-1.5 right-1.5 shadow-[0_0_6px_#22D3EE]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 absolute top-1.5 right-1.5 shadow-[0_0_6px_#F59E0B]" />
                     </button>
                     <button
                       onClick={() => setShowControls(true)}
@@ -620,7 +620,7 @@ function AfriVisaApp() {
                     </div>
 
                     <div className="my-2">
-                      <span className="text-3xl sm:text-4xl font-black text-[#22D3EE] font-mono tracking-tight drop-shadow-[0_0_15px_rgba(34,211,238,0.4)]">
+                      <span className="text-3xl sm:text-4xl font-black text-amber-400 font-mono tracking-tight drop-shadow-[0_0_15px_rgba(245,158,11,0.4)]">
                         ${Number(activeCard?.balance ?? stats?.total_balance_usd ?? 0.0).toFixed(2)}
                       </span>
                     </div>

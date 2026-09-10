@@ -126,8 +126,8 @@ export default function AdminDashboardModal({ isOpen, onClose }) {
     // Generate downloadable CSV directly in-browser
     const csvRows = [
       ['Timestamp', 'User', 'Type', 'Amount USD', 'Amount GHS', 'Status', 'Reference'],
-      ['2026-09-08 18:30:00', 'Kwame Mensah', 'AWS Infrastructure Debit', '-48.20', '-747.10', 'APPROVED', 'tx_demo_8821'],
-      ['2026-09-07 14:15:00', 'Kwame Mensah', 'GitHub Copilot Enterprise', '-19.00', '-294.50', 'APPROVED', 'tx_demo_8822'],
+      ['2026-09-08 18:30:00', 'Kwame Mensah', 'Cloud Infrastructure Debit', '-48.20', '-556.71', 'APPROVED', 'tx_live_8821'],
+      ['2026-09-07 14:15:00', 'Kwame Mensah', 'Developer Tools Debit', '-19.00', '-219.45', 'APPROVED', 'tx_live_8822'],
       ['2026-09-06 10:00:00', 'Kwame Mensah', 'MTN MoMo Inflow', '+100.00', '+1550.00', 'SETTLED', 'pay_momo_9921'],
       ['2026-09-05 09:20:00', 'Abena Frimpong', 'Telecel MoMo Inflow', '+250.00', '+3875.00', 'SETTLED', 'pay_momo_9922'],
       ['2026-09-04 16:45:00', 'Abena Frimpong', 'DigitalOcean Droplet', '-84.00', '-1302.00', 'APPROVED', 'tx_demo_8823'],

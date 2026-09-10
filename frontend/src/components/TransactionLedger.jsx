@@ -87,7 +87,7 @@ export default function TransactionLedger({ transactions = [] }) {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Filter by merchant (e.g. AWS, GitHub), reference, category..."
+          placeholder="Filter by merchant, reference ID, or category..."
           className="w-full bg-[#0d1117] border border-[#30363d] rounded-md py-1.5 pl-8 pr-3 text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
         />
       </div>

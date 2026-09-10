@@ -83,7 +83,7 @@ export default function LegalModal({ isOpen, onClose, initialTab = 'TERMS' }) {
               <div className="bg-zinc-950/80 rounded-2xl p-4 border border-zinc-800 space-y-2 font-mono text-xs">
                 <div className="flex justify-between text-zinc-400">
                   <span>Card Creation Fee:</span>
-                  <span className="text-white font-bold">$0.00 (First Card Free)</span>
+                  <span className="text-white font-bold">GH₵ 15.00</span>
                 </div>
                 <div className="flex justify-between text-zinc-400">
                   <span>Mobile Money Top-up Fee:</span>
